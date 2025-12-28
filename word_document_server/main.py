@@ -14,6 +14,7 @@ load_dotenv()
 # Set required environment variable for FastMCP 2.8.1+
 os.environ.setdefault('FASTMCP_LOG_LEVEL', 'INFO')
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from word_document_server.tools import (
     document_tools,
     content_tools,
@@ -91,59 +92,110 @@ def register_tools():
     """Register all tools with the MCP server using FastMCP decorators."""
     
     # Document tools (create, copy, info, etc.)
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Create Word Document",
+            destructiveHint=True,
+        ),
+    )
     def create_document(filename: str, title: str = None, author: str = None):
         """Create a new Word document with optional metadata."""
         return document_tools.create_document(filename, title, author)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Copy Word Document",
+            destructiveHint=True,
+        ),
+    )
     def copy_document(source_filename: str, destination_filename: str = None):
         """Create a copy of a Word document."""
         return document_tools.copy_document(source_filename, destination_filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Document Info",
+            readOnlyHint=True,
+        ),
+    )
     def get_document_info(filename: str):
         """Get information about a Word document."""
         return document_tools.get_document_info(filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Document Text",
+            readOnlyHint=True,
+        ),
+    )
     def get_document_text(filename: str):
         """Extract all text from a Word document."""
         return document_tools.get_document_text(filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Document Outline",
+            readOnlyHint=True,
+        ),
+    )
     def get_document_outline(filename: str):
         """Get the structure of a Word document."""
         return document_tools.get_document_outline(filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List Available Documents",
+            readOnlyHint=True,
+        ),
+    )
     def list_available_documents(directory: str = "."):
         """List all .docx files in the specified directory."""
         return document_tools.list_available_documents(directory)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Document XML",
+            readOnlyHint=True,
+        ),
+    )
     def get_document_xml(filename: str):
         """Get the raw XML structure of a Word document."""
         return document_tools.get_document_xml_tool(filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Insert Header Near Text",
+        ),
+    )
     def insert_header_near_text(filename: str, target_text: str = None, header_title: str = None, position: str = 'after', header_style: str = 'Heading 1', target_paragraph_index: int = None):
         """Insert a header (with specified style) before or after the target paragraph. Specify by text or paragraph index. Args: filename (str), target_text (str, optional), header_title (str), position ('before' or 'after'), header_style (str, default 'Heading 1'), target_paragraph_index (int, optional)."""
         return content_tools.insert_header_near_text_tool(filename, target_text, header_title, position, header_style, target_paragraph_index)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Insert Line Near Text",
+        ),
+    )
     def insert_line_or_paragraph_near_text(filename: str, target_text: str = None, line_text: str = None, position: str = 'after', line_style: str = None, target_paragraph_index: int = None):
         """
         Insert a new line or paragraph (with specified or matched style) before or after the target paragraph. Specify by text or paragraph index. Args: filename (str), target_text (str, optional), line_text (str), position ('before' or 'after'), line_style (str, optional), target_paragraph_index (int, optional).
         """
         return content_tools.insert_line_or_paragraph_near_text_tool(filename, target_text, line_text, position, line_style, target_paragraph_index)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Insert List Near Text",
+        ),
+    )
     def insert_numbered_list_near_text(filename: str, target_text: str = None, list_items: list = None, position: str = 'after', target_paragraph_index: int = None, bullet_type: str = 'bullet'):
         """Insert a bulleted or numbered list before or after the target paragraph. Specify by text or paragraph index. Args: filename (str), target_text (str, optional), list_items (list of str), position ('before' or 'after'), target_paragraph_index (int, optional), bullet_type ('bullet' for bullets or 'number' for numbered lists, default: 'bullet')."""
         return content_tools.insert_numbered_list_near_text_tool(filename, target_text, list_items, position, target_paragraph_index, bullet_type)
     # Content tools (paragraphs, headings, tables, etc.)
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Paragraph",
+        ),
+    )
     def add_paragraph(filename: str, text: str, style: str = None,
                       font_name: str = None, font_size: int = None,
                       bold: bool = None, italic: bool = None, color: str = None):
@@ -161,7 +213,11 @@ def register_tools():
         """
         return content_tools.add_paragraph(filename, text, style, font_name, font_size, bold, italic, color)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Heading",
+        ),
+    )
     def add_heading(filename: str, text: str, level: int = 1,
                     font_name: str = None, font_size: int = None,
                     bold: bool = None, italic: bool = None, border_bottom: bool = False):
@@ -179,153 +235,250 @@ def register_tools():
         """
         return content_tools.add_heading(filename, text, level, font_name, font_size, bold, italic, border_bottom)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Picture",
+        ),
+    )
     def add_picture(filename: str, image_path: str, width: float = None):
         """Add an image to a Word document."""
         return content_tools.add_picture(filename, image_path, width)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Table",
+        ),
+    )
     def add_table(filename: str, rows: int, cols: int, data: list = None):
         """Add a table to a Word document."""
         return content_tools.add_table(filename, rows, cols, data)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Page Break",
+        ),
+    )
     def add_page_break(filename: str):
         """Add a page break to the document."""
         return content_tools.add_page_break(filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Delete Paragraph",
+            destructiveHint=True,
+        ),
+    )
     def delete_paragraph(filename: str, paragraph_index: int):
         """Delete a paragraph from a document."""
         return content_tools.delete_paragraph(filename, paragraph_index)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Search and Replace",
+        ),
+    )
     def search_and_replace(filename: str, find_text: str, replace_text: str):
         """Search for text and replace all occurrences."""
         return content_tools.search_and_replace(filename, find_text, replace_text)
     
     # Format tools (styling, text formatting, etc.)
-    @mcp.tool()
-    def create_custom_style(filename: str, style_name: str, bold: bool = None, 
-                          italic: bool = None, font_size: int = None, 
-                          font_name: str = None, color: str = None, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Create Custom Style",
+        ),
+    )
+    def create_custom_style(filename: str, style_name: str, bold: bool = None,
+                          italic: bool = None, font_size: int = None,
+                          font_name: str = None, color: str = None,
                           base_style: str = None):
         """Create a custom style in the document."""
         return format_tools.create_custom_style(
             filename, style_name, bold, italic, font_size, font_name, color, base_style
         )
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Format Text",
+        ),
+    )
     def format_text(filename: str, paragraph_index: int, start_pos: int, end_pos: int,
                    bold: bool = None, italic: bool = None, underline: bool = None,
                    color: str = None, font_size: int = None, font_name: str = None):
         """Format a specific range of text within a paragraph."""
         return format_tools.format_text(
-            filename, paragraph_index, start_pos, end_pos, bold, italic, 
+            filename, paragraph_index, start_pos, end_pos, bold, italic,
             underline, color, font_size, font_name
         )
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Format Table",
+        ),
+    )
     def format_table(filename: str, table_index: int, has_header_row: bool = None,
                     border_style: str = None, shading: list = None):
         """Format a table with borders, shading, and structure."""
         return format_tools.format_table(filename, table_index, has_header_row, border_style, shading)
     
     # New table cell shading tools
-    @mcp.tool()
-    def set_table_cell_shading(filename: str, table_index: int, row_index: int, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Table Cell Shading",
+        ),
+    )
+    def set_table_cell_shading(filename: str, table_index: int, row_index: int,
                               col_index: int, fill_color: str, pattern: str = "clear"):
         """Apply shading/filling to a specific table cell."""
         return format_tools.set_table_cell_shading(filename, table_index, row_index, col_index, fill_color, pattern)
     
-    @mcp.tool()
-    def apply_table_alternating_rows(filename: str, table_index: int, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Apply Alternating Row Colors",
+        ),
+    )
+    def apply_table_alternating_rows(filename: str, table_index: int,
                                    color1: str = "FFFFFF", color2: str = "F2F2F2"):
         """Apply alternating row colors to a table for better readability."""
         return format_tools.apply_table_alternating_rows(filename, table_index, color1, color2)
     
-    @mcp.tool()
-    def highlight_table_header(filename: str, table_index: int, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Highlight Table Header",
+        ),
+    )
+    def highlight_table_header(filename: str, table_index: int,
                              header_color: str = "4472C4", text_color: str = "FFFFFF"):
         """Apply special highlighting to table header row."""
         return format_tools.highlight_table_header(filename, table_index, header_color, text_color)
     
     # Cell merging tools
-    @mcp.tool()
-    def merge_table_cells(filename: str, table_index: int, start_row: int, start_col: int, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Merge Table Cells",
+        ),
+    )
+    def merge_table_cells(filename: str, table_index: int, start_row: int, start_col: int,
                         end_row: int, end_col: int):
         """Merge cells in a rectangular area of a table."""
         return format_tools.merge_table_cells(filename, table_index, start_row, start_col, end_row, end_col)
     
-    @mcp.tool()
-    def merge_table_cells_horizontal(filename: str, table_index: int, row_index: int, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Merge Cells Horizontally",
+        ),
+    )
+    def merge_table_cells_horizontal(filename: str, table_index: int, row_index: int,
                                    start_col: int, end_col: int):
         """Merge cells horizontally in a single row."""
         return format_tools.merge_table_cells_horizontal(filename, table_index, row_index, start_col, end_col)
     
-    @mcp.tool()
-    def merge_table_cells_vertical(filename: str, table_index: int, col_index: int, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Merge Cells Vertically",
+        ),
+    )
+    def merge_table_cells_vertical(filename: str, table_index: int, col_index: int,
                                  start_row: int, end_row: int):
         """Merge cells vertically in a single column."""
         return format_tools.merge_table_cells_vertical(filename, table_index, col_index, start_row, end_row)
     
     # Cell alignment tools
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Cell Alignment",
+        ),
+    )
     def set_table_cell_alignment(filename: str, table_index: int, row_index: int, col_index: int,
                                horizontal: str = "left", vertical: str = "top"):
         """Set text alignment for a specific table cell."""
         return format_tools.set_table_cell_alignment(filename, table_index, row_index, col_index, horizontal, vertical)
     
-    @mcp.tool()
-    def set_table_alignment_all(filename: str, table_index: int, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Table Alignment",
+        ),
+    )
+    def set_table_alignment_all(filename: str, table_index: int,
                               horizontal: str = "left", vertical: str = "top"):
         """Set text alignment for all cells in a table."""
         return format_tools.set_table_alignment_all(filename, table_index, horizontal, vertical)
     
     # Protection tools
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Protect Document",
+        ),
+    )
     def protect_document(filename: str, password: str):
         """Add password protection to a Word document."""
         return protection_tools.protect_document(filename, password)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Unprotect Document",
+        ),
+    )
     def unprotect_document(filename: str, password: str):
         """Remove password protection from a Word document."""
         return protection_tools.unprotect_document(filename, password)
     
     # Footnote tools
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Footnote",
+        ),
+    )
     def add_footnote_to_document(filename: str, paragraph_index: int, footnote_text: str):
         """Add a footnote to a specific paragraph in a Word document."""
         return footnote_tools.add_footnote_to_document(filename, paragraph_index, footnote_text)
     
-    @mcp.tool()
-    def add_footnote_after_text(filename: str, search_text: str, footnote_text: str, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Footnote After Text",
+        ),
+    )
+    def add_footnote_after_text(filename: str, search_text: str, footnote_text: str,
                                output_filename: str = None):
         """Add a footnote after specific text with proper superscript formatting.
         This enhanced function ensures footnotes display correctly as superscript."""
         return footnote_tools.add_footnote_after_text(filename, search_text, footnote_text, output_filename)
     
-    @mcp.tool()
-    def add_footnote_before_text(filename: str, search_text: str, footnote_text: str, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Footnote Before Text",
+        ),
+    )
+    def add_footnote_before_text(filename: str, search_text: str, footnote_text: str,
                                 output_filename: str = None):
         """Add a footnote before specific text with proper superscript formatting.
         This enhanced function ensures footnotes display correctly as superscript."""
         return footnote_tools.add_footnote_before_text(filename, search_text, footnote_text, output_filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Footnote Enhanced",
+        ),
+    )
     def add_footnote_enhanced(filename: str, paragraph_index: int, footnote_text: str,
                              output_filename: str = None):
         """Enhanced footnote addition with guaranteed superscript formatting.
         Adds footnote at the end of a specific paragraph with proper style handling."""
         return footnote_tools.add_footnote_enhanced(filename, paragraph_index, footnote_text, output_filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Endnote",
+        ),
+    )
     def add_endnote_to_document(filename: str, paragraph_index: int, endnote_text: str):
         """Add an endnote to a specific paragraph in a Word document."""
         return footnote_tools.add_endnote_to_document(filename, paragraph_index, endnote_text)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Customize Footnote Style",
+        ),
+    )
     def customize_footnote_style(filename: str, numbering_format: str = "1, 2, 3",
                                 start_number: int = 1, font_name: str = None,
                                 font_size: int = None):
@@ -334,7 +487,12 @@ def register_tools():
             filename, numbering_format, start_number, font_name, font_size
         )
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Delete Footnote",
+            destructiveHint=True,
+        ),
+    )
     def delete_footnote_from_document(filename: str, footnote_id: int = None,
                                      search_text: str = None, output_filename: str = None):
         """Delete a footnote from a Word document.
@@ -344,24 +502,38 @@ def register_tools():
         )
     
     # Robust footnote tools - Production-ready with comprehensive validation
-    @mcp.tool()
-    def add_footnote_robust(filename: str, search_text: str = None, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Footnote Robust",
+        ),
+    )
+    def add_footnote_robust(filename: str, search_text: str = None,
                            paragraph_index: int = None, footnote_text: str = "",
                            validate_location: bool = True, auto_repair: bool = False):
         """Add footnote with robust validation and Word compliance.
         This is the production-ready version with comprehensive error handling."""
         return footnote_tools.add_footnote_robust_tool(
-            filename, search_text, paragraph_index, footnote_text, 
+            filename, search_text, paragraph_index, footnote_text,
             validate_location, auto_repair
         )
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Validate Footnotes",
+            readOnlyHint=True,
+        ),
+    )
     def validate_document_footnotes(filename: str):
         """Validate all footnotes in document for coherence and compliance.
         Returns detailed report on ID conflicts, orphaned content, missing styles, etc."""
         return footnote_tools.validate_footnotes_tool(filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Delete Footnote Robust",
+            destructiveHint=True,
+        ),
+    )
     def delete_footnote_robust(filename: str, footnote_id: int = None,
                               search_text: str = None, clean_orphans: bool = True):
         """Delete footnote with comprehensive cleanup and orphan removal.
@@ -371,12 +543,22 @@ def register_tools():
         )
     
     # Extended document tools
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Paragraph Text",
+            readOnlyHint=True,
+        ),
+    )
     def get_paragraph_text_from_document(filename: str, paragraph_index: int):
         """Get text from a specific paragraph in a Word document."""
         return extended_document_tools.get_paragraph_text_from_document(filename, paragraph_index)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Find Text",
+            readOnlyHint=True,
+        ),
+    )
     def find_text_in_document(filename: str, text_to_find: str, match_case: bool = True,
                              whole_word: bool = False):
         """Find occurrences of specific text in a Word document."""
@@ -384,62 +566,110 @@ def register_tools():
             filename, text_to_find, match_case, whole_word
         )
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Convert to PDF",
+            destructiveHint=True,
+        ),
+    )
     def convert_to_pdf(filename: str, output_filename: str = None):
         """Convert a Word document to PDF format."""
         return extended_document_tools.convert_to_pdf(filename, output_filename)
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Replace Block Below Header",
+        ),
+    )
     def replace_paragraph_block_below_header(filename: str, header_text: str, new_paragraphs: list, detect_block_end_fn=None):
         """Reemplaza el bloque de párrafos debajo de un encabezado, evitando modificar TOC."""
         return replace_paragraph_block_below_header_tool(filename, header_text, new_paragraphs, detect_block_end_fn)
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Replace Block Between Anchors",
+        ),
+    )
     def replace_block_between_manual_anchors(filename: str, start_anchor_text: str, new_paragraphs: list, end_anchor_text: str = None, match_fn=None, new_paragraph_style: str = None):
         """Replace all content between start_anchor_text and end_anchor_text (or next logical header if not provided)."""
         return replace_block_between_manual_anchors_tool(filename, start_anchor_text, new_paragraphs, end_anchor_text, match_fn, new_paragraph_style)
 
     # Comment tools
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get All Comments",
+            readOnlyHint=True,
+        ),
+    )
     def get_all_comments(filename: str):
         """Extract all comments from a Word document."""
         return comment_tools.get_all_comments(filename)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Comments by Author",
+            readOnlyHint=True,
+        ),
+    )
     def get_comments_by_author(filename: str, author: str):
         """Extract comments from a specific author in a Word document."""
         return comment_tools.get_comments_by_author(filename, author)
     
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get Comments for Paragraph",
+            readOnlyHint=True,
+        ),
+    )
     def get_comments_for_paragraph(filename: str, paragraph_index: int):
         """Extract comments for a specific paragraph in a Word document."""
         return comment_tools.get_comments_for_paragraph(filename, paragraph_index)
     # New table column width tools
-    @mcp.tool()
-    def set_table_column_width(filename: str, table_index: int, col_index: int, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Column Width",
+        ),
+    )
+    def set_table_column_width(filename: str, table_index: int, col_index: int,
                               width: float, width_type: str = "points"):
         """Set the width of a specific table column."""
         return format_tools.set_table_column_width(filename, table_index, col_index, width, width_type)
 
-    @mcp.tool()
-    def set_table_column_widths(filename: str, table_index: int, widths: list, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Column Widths",
+        ),
+    )
+    def set_table_column_widths(filename: str, table_index: int, widths: list,
                                width_type: str = "points"):
         """Set the widths of multiple table columns."""
         return format_tools.set_table_column_widths(filename, table_index, widths, width_type)
 
-    @mcp.tool()
-    def set_table_width(filename: str, table_index: int, width: float, 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Table Width",
+        ),
+    )
+    def set_table_width(filename: str, table_index: int, width: float,
                        width_type: str = "points"):
         """Set the overall width of a table."""
         return format_tools.set_table_width(filename, table_index, width, width_type)
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Auto-Fit Table Columns",
+        ),
+    )
     def auto_fit_table_columns(filename: str, table_index: int):
         """Set table columns to auto-fit based on content."""
         return format_tools.auto_fit_table_columns(filename, table_index)
 
     # New table cell text formatting and padding tools
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Format Cell Text",
+        ),
+    )
     def format_table_cell_text(filename: str, table_index: int, row_index: int, col_index: int,
                                text_content: str = None, bold: bool = None, italic: bool = None,
                                underline: bool = None, color: str = None, font_size: int = None,
@@ -448,9 +678,13 @@ def register_tools():
         return format_tools.format_table_cell_text(filename, table_index, row_index, col_index,
                                                    text_content, bold, italic, underline, color, font_size, font_name)
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Cell Padding",
+        ),
+    )
     def set_table_cell_padding(filename: str, table_index: int, row_index: int, col_index: int,
-                               top: float = None, bottom: float = None, left: float = None, 
+                               top: float = None, bottom: float = None, left: float = None,
                                right: float = None, unit: str = "points"):
         """Set padding/margins for a specific table cell."""
         return format_tools.set_table_cell_padding(filename, table_index, row_index, col_index,
