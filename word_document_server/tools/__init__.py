@@ -40,3 +40,12 @@ from word_document_server.tools.footnote_tools import (
 from word_document_server.tools.comment_tools import (
     get_all_comments, get_comments_by_author, get_comments_for_paragraph
 )
+
+# Comment write tools
+from word_document_server.tools import comment_write_tools
+
+# Hyperlink tools
+from word_document_server.tools import hyperlink_tools
+
+# Tracked changes tools
+from word_document_server.tools import tracked_changes_tools

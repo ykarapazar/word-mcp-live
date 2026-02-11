@@ -22,7 +22,10 @@ from word_document_server.tools import (
     protection_tools,
     footnote_tools,
     extended_document_tools,
-    comment_tools
+    comment_tools,
+    comment_write_tools,
+    hyperlink_tools,
+    tracked_changes_tools
 )
 from word_document_server.tools.content_tools import replace_paragraph_block_below_header_tool
 from word_document_server.tools.content_tools import replace_block_between_manual_anchors_tool
@@ -625,6 +628,46 @@ def register_tools():
     def get_comments_for_paragraph(filename: str, paragraph_index: int):
         """Extract comments for a specific paragraph in a Word document."""
         return comment_tools.get_comments_for_paragraph(filename, paragraph_index)
+    # Comment write tools
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Comment",
+        ),
+    )
+    def add_comment(filename: str, target_text: str, comment_text: str,
+                    author: str = "Av. Yüce Karapazar", initials: str = "AYK"):
+        """Add a comment to a Word document anchored to specific text.
+        The comment will appear in Word's Review panel attached to the target text.
+
+        Args:
+            filename: Path to Word document
+            target_text: Text in the document to attach the comment to
+            comment_text: The comment content
+            author: Comment author name (default: Av. Yüce Karapazar)
+            initials: Author initials (default: AYK)
+        """
+        return comment_write_tools.add_comment(filename, target_text, comment_text, author, initials)
+
+    # Hyperlink tools
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Manage Hyperlinks",
+        ),
+    )
+    def manage_hyperlinks(filename: str, action: str = "add", text: str = "",
+                          url: str = "", paragraph_index: int = None):
+        """Add or manage hyperlinks in a Word document.
+        Finds the specified text and converts it to a clickable hyperlink with blue underline.
+
+        Args:
+            filename: Path to Word document
+            action: Action to perform ("add" to add a hyperlink)
+            text: Text to convert to a hyperlink
+            url: URL the hyperlink should point to
+            paragraph_index: If specified, only search in this paragraph (0-based)
+        """
+        return hyperlink_tools.manage_hyperlinks(filename, action, text, url, paragraph_index)
+
     # New table column width tools
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -693,6 +736,75 @@ def register_tools():
 
 
 
+    # Tracked changes tools
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Track Replace",
+            destructiveHint=True,
+        ),
+    )
+    def track_replace(filename: str, old_text: str, new_text: str, author: str = "Av. Yüce Karapazar"):
+        """Replace text with tracked changes. Marks old text as deleted and new text as inserted,
+        so the change is visible in Word's Review panel. Use this instead of search_and_replace
+        when you want the change to be reviewable by the user."""
+        return tracked_changes_tools.track_replace(filename, old_text, new_text, author)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Track Insert",
+            destructiveHint=True,
+        ),
+    )
+    def track_insert(filename: str, after_text: str, insert_text: str, author: str = "Av. Yüce Karapazar"):
+        """Insert text after a specific string, marked as a tracked insertion visible in
+        Word's Review panel. The inserted text appears with underline/color marking."""
+        return tracked_changes_tools.track_insert(filename, after_text, insert_text, author)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Track Delete",
+            destructiveHint=True,
+        ),
+    )
+    def track_delete(filename: str, text: str, author: str = "Av. Yüce Karapazar"):
+        """Mark text as deleted (tracked deletion) visible in Word's Review panel.
+        The text appears with strikethrough marking and can be accepted or rejected."""
+        return tracked_changes_tools.track_delete(filename, text, author)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List Tracked Changes",
+            readOnlyHint=True,
+        ),
+    )
+    def list_tracked_changes(filename: str):
+        """List all tracked changes (insertions and deletions) in a Word document.
+        Returns author, date, text, and paragraph context for each change."""
+        return tracked_changes_tools.list_tracked_changes(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Accept Tracked Changes",
+            destructiveHint=True,
+        ),
+    )
+    def accept_tracked_changes(filename: str, author: str = None, change_ids: list[int] = None):
+        """Accept tracked changes: apply insertions (keep text) and remove deletions.
+        Optionally filter by author or specific change IDs."""
+        return tracked_changes_tools.accept_tracked_changes(filename, author, change_ids)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Reject Tracked Changes",
+            destructiveHint=True,
+        ),
+    )
+    def reject_tracked_changes(filename: str, author: str = None, change_ids: list[int] = None):
+        """Reject tracked changes: remove insertions and restore deleted text.
+        Optionally filter by author or specific change IDs."""
+        return tracked_changes_tools.reject_tracked_changes(filename, author, change_ids)
+
+
 def run_server():
     """Run the Word Document MCP Server with configurable transport."""
     # Get transport configuration
@@ -701,6 +813,10 @@ def run_server():
     # Setup logging
     # setup_logging(config['debug'])
     
+    # Monkey-patch Document.save() to preserve comments.xml and other custom parts
+    from word_document_server.utils.save_utils import install_save_hook
+    install_save_hook()
+
     # Register all tools
     register_tools()
     
