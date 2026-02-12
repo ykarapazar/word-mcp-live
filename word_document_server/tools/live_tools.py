@@ -37,44 +37,45 @@ async def word_live_insert_text(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
 
-        prev_tracking = doc.TrackRevisions
-        prev_author = app.UserName
-        if track_changes:
-            doc.TrackRevisions = True
-            app.UserName = DEFAULT_AUTHOR
-
-        try:
-            if bookmark:
-                if not doc.Bookmarks.Exists(bookmark):
-                    return json.dumps({"error": f"Bookmark '{bookmark}' not found"})
-                doc.Bookmarks(bookmark).Range.InsertAfter(text)
-            elif position == "start":
-                doc.Range(0, 0).InsertBefore(text)
-            elif position == "end":
-                end_pos = doc.Content.End - 1
-                doc.Range(end_pos, end_pos).InsertAfter(text)
-            elif position == "cursor":
-                app.Selection.TypeText(text)
-            else:
-                try:
-                    offset = int(position)
-                    doc.Range(offset, offset).InsertBefore(text)
-                except ValueError:
-                    return json.dumps(
-                        {
-                            "error": f"Invalid position: {position}. "
-                            "Use 'start', 'end', 'cursor', or a character offset."
-                        }
-                    )
-        finally:
+        with undo_record(app, "MCP: Insert Text"):
+            prev_tracking = doc.TrackRevisions
+            prev_author = app.UserName
             if track_changes:
-                doc.TrackRevisions = prev_tracking
-                app.UserName = prev_author
+                doc.TrackRevisions = True
+                app.UserName = DEFAULT_AUTHOR
+
+            try:
+                if bookmark:
+                    if not doc.Bookmarks.Exists(bookmark):
+                        return json.dumps({"error": f"Bookmark '{bookmark}' not found"})
+                    doc.Bookmarks(bookmark).Range.InsertAfter(text)
+                elif position == "start":
+                    doc.Range(0, 0).InsertBefore(text)
+                elif position == "end":
+                    end_pos = doc.Content.End - 1
+                    doc.Range(end_pos, end_pos).InsertAfter(text)
+                elif position == "cursor":
+                    app.Selection.TypeText(text)
+                else:
+                    try:
+                        offset = int(position)
+                        doc.Range(offset, offset).InsertBefore(text)
+                    except ValueError:
+                        return json.dumps(
+                            {
+                                "error": f"Invalid position: {position}. "
+                                "Use 'start', 'end', 'cursor', or a character offset."
+                            }
+                        )
+            finally:
+                if track_changes:
+                    doc.TrackRevisions = prev_tracking
+                    app.UserName = prev_author
 
         return json.dumps(
             {
@@ -145,48 +146,49 @@ async def word_live_format_text(
         )
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
         rng = doc.Range(start, end)
 
-        prev_tracking = doc.TrackRevisions
-        prev_author = app.UserName
-        if track_changes:
-            doc.TrackRevisions = True
-            app.UserName = DEFAULT_AUTHOR
-
-        try:
-            if bold is not None:
-                rng.Font.Bold = bold
-            if italic is not None:
-                rng.Font.Italic = italic
-            if underline is not None:
-                rng.Font.Underline = 1 if underline else 0
-            if font_name is not None:
-                rng.Font.Name = font_name
-            if font_size is not None:
-                rng.Font.Size = font_size
-            if font_color is not None:
-                c = font_color.lstrip("#")
-                r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
-                rng.Font.Color = r + (g << 8) + (b << 16)
-            if highlight_color is not None:
-                rng.HighlightColorIndex = highlight_color
-            if style_name is not None:
-                rng.Style = style_name
-            if paragraph_alignment is not None:
-                align_map = {"left": 0, "center": 1, "right": 2, "justify": 3}
-                al = align_map.get(paragraph_alignment.lower())
-                if al is None:
-                    return json.dumps({"error": f"Invalid alignment: {paragraph_alignment}. Use: left, center, right, justify"})
-                for para in rng.Paragraphs:
-                    para.Format.Alignment = al
-        finally:
+        with undo_record(app, "MCP: Format Text"):
+            prev_tracking = doc.TrackRevisions
+            prev_author = app.UserName
             if track_changes:
-                doc.TrackRevisions = prev_tracking
-                app.UserName = prev_author
+                doc.TrackRevisions = True
+                app.UserName = DEFAULT_AUTHOR
+
+            try:
+                if bold is not None:
+                    rng.Font.Bold = bold
+                if italic is not None:
+                    rng.Font.Italic = italic
+                if underline is not None:
+                    rng.Font.Underline = 1 if underline else 0
+                if font_name is not None:
+                    rng.Font.Name = font_name
+                if font_size is not None:
+                    rng.Font.Size = font_size
+                if font_color is not None:
+                    c = font_color.lstrip("#")
+                    r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+                    rng.Font.Color = r + (g << 8) + (b << 16)
+                if highlight_color is not None:
+                    rng.HighlightColorIndex = highlight_color
+                if style_name is not None:
+                    rng.Style = style_name
+                if paragraph_alignment is not None:
+                    align_map = {"left": 0, "center": 1, "right": 2, "justify": 3}
+                    al = align_map.get(paragraph_alignment.lower())
+                    if al is None:
+                        return json.dumps({"error": f"Invalid alignment: {paragraph_alignment}. Use: left, center, right, justify"})
+                    for para in rng.Paragraphs:
+                        para.Format.Alignment = al
+            finally:
+                if track_changes:
+                    doc.TrackRevisions = prev_tracking
+                    app.UserName = prev_author
 
         preview = rng.Text
         if len(preview) > 50:
@@ -243,7 +245,7 @@ async def word_live_apply_list(
         end_paragraph = start_paragraph
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -254,38 +256,39 @@ async def word_live_apply_list(
                 "error": f"Paragraph range {start_paragraph}-{end_paragraph} out of bounds (doc has {total_paras} paragraphs)"
             })
 
-        prev_tracking = doc.TrackRevisions
-        prev_author = app.UserName
-        if track_changes:
-            doc.TrackRevisions = True
-            app.UserName = DEFAULT_AUTHOR
-
-        try:
-            # Word COM ListGallery constants:
-            # wdBulletGallery = 1, wdNumberGallery = 2, wdOutlineNumberGallery = 3
-            gallery_map = {"bullet": 1, "number": 2}
-            formatted = 0
-
-            for i in range(start_paragraph, end_paragraph + 1):
-                para = doc.Paragraphs(i)
-                if remove:
-                    para.Range.ListFormat.RemoveNumbers()
-                else:
-                    gallery_idx = gallery_map.get(list_type, 1)
-                    template = doc.Application.ListGalleries(gallery_idx).ListTemplates(1)
-                    should_continue = (i > start_paragraph) or continue_previous
-                    para.Range.ListFormat.ApplyListTemplateWithLevel(
-                        ListTemplate=template,
-                        ContinuePreviousList=should_continue,
-                        DefaultListBehavior=1,  # wdWord2003
-                    )
-                    if level > 0:
-                        para.Range.ListFormat.ListLevelNumber = level + 1
-                formatted += 1
-        finally:
+        with undo_record(app, "MCP: Apply List"):
+            prev_tracking = doc.TrackRevisions
+            prev_author = app.UserName
             if track_changes:
-                doc.TrackRevisions = prev_tracking
-                app.UserName = prev_author
+                doc.TrackRevisions = True
+                app.UserName = DEFAULT_AUTHOR
+
+            try:
+                # Word COM ListGallery constants:
+                # wdBulletGallery = 1, wdNumberGallery = 2, wdOutlineNumberGallery = 3
+                gallery_map = {"bullet": 1, "number": 2}
+                formatted = 0
+
+                for i in range(start_paragraph, end_paragraph + 1):
+                    para = doc.Paragraphs(i)
+                    if remove:
+                        para.Range.ListFormat.RemoveNumbers()
+                    else:
+                        gallery_idx = gallery_map.get(list_type, 1)
+                        template = doc.Application.ListGalleries(gallery_idx).ListTemplates(1)
+                        should_continue = (i > start_paragraph) or continue_previous
+                        para.Range.ListFormat.ApplyListTemplateWithLevel(
+                            ListTemplate=template,
+                            ContinuePreviousList=should_continue,
+                            DefaultListBehavior=1,  # wdWord2003
+                        )
+                        if level > 0:
+                            para.Range.ListFormat.ListLevelNumber = level + 1
+                    formatted += 1
+            finally:
+                if track_changes:
+                    doc.TrackRevisions = prev_tracking
+                    app.UserName = prev_author
 
         action = "removed" if remove else f"applied {list_type}"
         return json.dumps({
@@ -337,116 +340,117 @@ async def word_live_setup_heading_numbering(
         return json.dumps({"error": "Provide h1_paragraphs and/or h2_paragraphs"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
 
-        color_int = 0x0D + (0x0D << 8) + (0x0D << 16)  # #0D0D0D in Word RGB
+        with undo_record(app, "MCP: Setup Heading Numbering"):
+            color_int = 0x0D + (0x0D << 8) + (0x0D << 16)  # #0D0D0D in Word RGB
 
-        # --- Customize Heading 1 style ---
-        s1 = doc.Styles(-2)  # wdStyleHeading1
-        s1.Font.Name = "Cambria"
-        s1.Font.Size = 13
-        s1.Font.Bold = True
-        s1.Font.Italic = False
-        s1.Font.Color = color_int
-        s1.ParagraphFormat.Alignment = 3  # justify
-        s1.ParagraphFormat.SpaceBefore = 18
-        s1.ParagraphFormat.SpaceAfter = 6
-        s1.ParagraphFormat.LineSpacingRule = 5  # multiple
-        s1.ParagraphFormat.LineSpacing = 13.8
-        s1.ParagraphFormat.KeepWithNext = True
-        s1.ParagraphFormat.KeepTogether = False
+            # --- Customize Heading 1 style ---
+            s1 = doc.Styles(-2)  # wdStyleHeading1
+            s1.Font.Name = "Cambria"
+            s1.Font.Size = 13
+            s1.Font.Bold = True
+            s1.Font.Italic = False
+            s1.Font.Color = color_int
+            s1.ParagraphFormat.Alignment = 3  # justify
+            s1.ParagraphFormat.SpaceBefore = 18
+            s1.ParagraphFormat.SpaceAfter = 6
+            s1.ParagraphFormat.LineSpacingRule = 5  # multiple
+            s1.ParagraphFormat.LineSpacing = 13.8
+            s1.ParagraphFormat.KeepWithNext = True
+            s1.ParagraphFormat.KeepTogether = False
 
-        # --- Customize Heading 2 style ---
-        s2 = doc.Styles(-3)  # wdStyleHeading2
-        s2.Font.Name = "Cambria"
-        s2.Font.Size = 11
-        s2.Font.Bold = True
-        s2.Font.Italic = False
-        s2.Font.Color = color_int
-        s2.ParagraphFormat.Alignment = 3
-        s2.ParagraphFormat.SpaceBefore = 12
-        s2.ParagraphFormat.SpaceAfter = 6
-        s2.ParagraphFormat.LineSpacingRule = 5
-        s2.ParagraphFormat.LineSpacing = 13.8
-        s2.ParagraphFormat.KeepWithNext = True
-        s2.ParagraphFormat.KeepTogether = False
+            # --- Customize Heading 2 style ---
+            s2 = doc.Styles(-3)  # wdStyleHeading2
+            s2.Font.Name = "Cambria"
+            s2.Font.Size = 11
+            s2.Font.Bold = True
+            s2.Font.Italic = False
+            s2.Font.Color = color_int
+            s2.ParagraphFormat.Alignment = 3
+            s2.ParagraphFormat.SpaceBefore = 12
+            s2.ParagraphFormat.SpaceAfter = 6
+            s2.ParagraphFormat.LineSpacingRule = 5
+            s2.ParagraphFormat.LineSpacing = 13.8
+            s2.ParagraphFormat.KeepWithNext = True
+            s2.ParagraphFormat.KeepTogether = False
 
-        # --- Create multilevel list template ---
-        lt = doc.ListTemplates.Add(OutlineNumbered=True)
+            # --- Create multilevel list template ---
+            lt = doc.ListTemplates.Add(OutlineNumbered=True)
 
-        # Level 1: "1." linked to Heading 1
-        lv1 = lt.ListLevels(1)
-        lv1.NumberFormat = "%1."
-        lv1.NumberStyle = 0  # wdListNumberStyleArabic
-        lv1.StartAt = 1
-        lv1.Alignment = 0  # left
-        lv1.NumberPosition = 0
-        lv1.TextPosition = 28  # ~1cm indent for text after number
-        lv1.TabPosition = 28
-        lv1.LinkedStyle = "Heading 1"
+            # Level 1: "1." linked to Heading 1
+            lv1 = lt.ListLevels(1)
+            lv1.NumberFormat = "%1."
+            lv1.NumberStyle = 0  # wdListNumberStyleArabic
+            lv1.StartAt = 1
+            lv1.Alignment = 0  # left
+            lv1.NumberPosition = 0
+            lv1.TextPosition = 28  # ~1cm indent for text after number
+            lv1.TabPosition = 28
+            lv1.LinkedStyle = "Heading 1"
 
-        # Level 2: "1.1" linked to Heading 2
-        lv2 = lt.ListLevels(2)
-        lv2.NumberFormat = "%1.%2"
-        lv2.NumberStyle = 0
-        lv2.StartAt = 1
-        lv2.Alignment = 0
-        lv2.NumberPosition = 0
-        lv2.TextPosition = 28
-        lv2.TabPosition = 28
-        lv2.LinkedStyle = "Heading 2"
+            # Level 2: "1.1" linked to Heading 2
+            lv2 = lt.ListLevels(2)
+            lv2.NumberFormat = "%1.%2"
+            lv2.NumberStyle = 0
+            lv2.StartAt = 1
+            lv2.Alignment = 0
+            lv2.NumberPosition = 0
+            lv2.TextPosition = 28
+            lv2.TabPosition = 28
+            lv2.LinkedStyle = "Heading 2"
 
-        # --- Apply styles to paragraphs ---
-        h1_applied = 0
-        h2_applied = 0
+            # --- Apply styles to paragraphs ---
+            h1_applied = 0
+            h2_applied = 0
 
-        all_heading_paras = []
-        for idx in (h1_paragraphs or []):
-            all_heading_paras.append((idx, -2))  # wdStyleHeading1
-        for idx in (h2_paragraphs or []):
-            all_heading_paras.append((idx, -3))  # wdStyleHeading2
-        all_heading_paras.sort(key=lambda x: x[0])
+            all_heading_paras = []
+            for idx in (h1_paragraphs or []):
+                all_heading_paras.append((idx, -2))  # wdStyleHeading1
+            for idx in (h2_paragraphs or []):
+                all_heading_paras.append((idx, -3))  # wdStyleHeading2
+            all_heading_paras.sort(key=lambda x: x[0])
 
-        for para_idx, style_id in all_heading_paras:
-            if para_idx < 1 or para_idx > doc.Paragraphs.Count:
-                continue
-            para = doc.Paragraphs(para_idx)
-            para.Style = doc.Styles(style_id)
-            if style_id == -2:
-                h1_applied += 1
-            else:
-                h2_applied += 1
+            for para_idx, style_id in all_heading_paras:
+                if para_idx < 1 or para_idx > doc.Paragraphs.Count:
+                    continue
+                para = doc.Paragraphs(para_idx)
+                para.Style = doc.Styles(style_id)
+                if style_id == -2:
+                    h1_applied += 1
+                else:
+                    h2_applied += 1
 
-        # --- Apply list template to all heading paragraphs ---
-        for para_idx, _ in all_heading_paras:
-            if para_idx < 1 or para_idx > doc.Paragraphs.Count:
-                continue
-            para = doc.Paragraphs(para_idx)
-            para.Range.ListFormat.ApplyListTemplateWithLevel(
-                ListTemplate=lt,
-                ContinuePreviousList=True,
-                DefaultListBehavior=1,
-            )
-
-        # --- Strip manual numbers ---
-        stripped = 0
-        if strip_manual_numbers:
+            # --- Apply list template to all heading paragraphs ---
             for para_idx, _ in all_heading_paras:
                 if para_idx < 1 or para_idx > doc.Paragraphs.Count:
                     continue
                 para = doc.Paragraphs(para_idx)
-                text = para.Range.Text.rstrip("\r\x07")
-                # Match patterns: "1. ", "1.1 ", "2.3 ", "10. ", "10.2 ", etc.
-                m = re.match(r"^\d+(\.\d+)*\.?\s+", text)
-                if m:
-                    # Delete the matched prefix
-                    prefix_len = len(m.group(0))
-                    rng = doc.Range(para.Range.Start, para.Range.Start + prefix_len)
-                    rng.Delete()
-                    stripped += 1
+                para.Range.ListFormat.ApplyListTemplateWithLevel(
+                    ListTemplate=lt,
+                    ContinuePreviousList=True,
+                    DefaultListBehavior=1,
+                )
+
+            # --- Strip manual numbers ---
+            stripped = 0
+            if strip_manual_numbers:
+                for para_idx, _ in all_heading_paras:
+                    if para_idx < 1 or para_idx > doc.Paragraphs.Count:
+                        continue
+                    para = doc.Paragraphs(para_idx)
+                    text = para.Range.Text.rstrip("\r\x07")
+                    # Match patterns: "1. ", "1.1 ", "2.3 ", "10. ", "10.2 ", etc.
+                    m = re.match(r"^\d+(\.\d+)*\.?\s+", text)
+                    if m:
+                        # Delete the matched prefix
+                        prefix_len = len(m.group(0))
+                        rng = doc.Range(para.Range.Start, para.Range.Start + prefix_len)
+                        rng.Delete()
+                        stripped += 1
 
         return json.dumps({
             "success": True,
@@ -485,7 +489,7 @@ async def word_live_add_table(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -502,26 +506,27 @@ async def word_live_add_table(
             except ValueError:
                 return json.dumps({"error": f"Invalid position: {position}"})
 
-        prev_tracking = doc.TrackRevisions
-        prev_author = app.UserName
-        if track_changes:
-            doc.TrackRevisions = True
-            app.UserName = DEFAULT_AUTHOR
-
-        try:
-            table = doc.Tables.Add(rng, rows, cols)
-            if data:
-                for r_idx, row_data in enumerate(data):
-                    if r_idx >= rows:
-                        break
-                    for c_idx, cell_val in enumerate(row_data):
-                        if c_idx >= cols:
-                            break
-                        table.Cell(r_idx + 1, c_idx + 1).Range.Text = str(cell_val)
-        finally:
+        with undo_record(app, "MCP: Add Table"):
+            prev_tracking = doc.TrackRevisions
+            prev_author = app.UserName
             if track_changes:
-                doc.TrackRevisions = prev_tracking
-                app.UserName = prev_author
+                doc.TrackRevisions = True
+                app.UserName = DEFAULT_AUTHOR
+
+            try:
+                table = doc.Tables.Add(rng, rows, cols)
+                if data:
+                    for r_idx, row_data in enumerate(data):
+                        if r_idx >= rows:
+                            break
+                        for c_idx, cell_val in enumerate(row_data):
+                            if c_idx >= cols:
+                                break
+                            table.Cell(r_idx + 1, c_idx + 1).Range.Text = str(cell_val)
+            finally:
+                if track_changes:
+                    doc.TrackRevisions = prev_tracking
+                    app.UserName = prev_author
 
         return json.dumps(
             {
@@ -564,25 +569,26 @@ async def word_live_delete_text(
         )
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
         rng = doc.Range(start, end)
         deleted_text = rng.Text
 
-        prev_tracking = doc.TrackRevisions
-        prev_author = app.UserName
-        if track_changes:
-            doc.TrackRevisions = True
-            app.UserName = DEFAULT_AUTHOR
-
-        try:
-            rng.Delete()
-        finally:
+        with undo_record(app, "MCP: Delete Text"):
+            prev_tracking = doc.TrackRevisions
+            prev_author = app.UserName
             if track_changes:
-                doc.TrackRevisions = prev_tracking
-                app.UserName = prev_author
+                doc.TrackRevisions = True
+                app.UserName = DEFAULT_AUTHOR
+
+            try:
+                rng.Delete()
+            finally:
+                if track_changes:
+                    doc.TrackRevisions = prev_tracking
+                    app.UserName = prev_author
 
         preview = deleted_text
         if len(preview) > 100:
@@ -597,6 +603,48 @@ async def word_live_delete_text(
                 "tracked": track_changes,
             }
         )
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_undo(
+    filename: str = None,
+    times: int = 1,
+) -> str:
+    """[Windows only] Undo the last N operations in an open Word document.
+
+    Each MCP destructive tool call is grouped as a single undo entry (e.g.,
+    "MCP: Insert Text"). Calling undo(times=1) reverts the last MCP operation;
+    undo(times=3) reverts the last three.
+
+    Args:
+        filename: Document name or path (None = active document).
+        times: Number of undo steps (default 1).
+
+    Returns:
+        JSON with success status and number of undone steps.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    if times < 1:
+        return json.dumps({"error": "times must be >= 1"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        result = doc.Undo(times)
+
+        return json.dumps({
+            "success": bool(result),
+            "document": doc.Name,
+            "times_requested": times,
+            "undo_result": bool(result),
+        })
 
     except Exception as e:
         return json.dumps({"error": str(e)})

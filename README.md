@@ -4,18 +4,18 @@ MCP server for Microsoft Word with live COM automation on Windows.
 
 ![Platform: Windows + macOS/Linux](https://img.shields.io/badge/platform-Windows%20%2B%20macOS%2FLinux-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![Tools: 102](https://img.shields.io/badge/tools-102-orange)
+![Tools: 105](https://img.shields.io/badge/tools-105-orange)
 
-78 cross-platform tools (python-docx) work everywhere. 24 Windows-only live tools use COM automation to edit documents **while they're open in Word** — no file locking issues, real-time tracked changes, comments, and layout control.
+78 cross-platform tools (python-docx) work everywhere. 27 Windows-only live tools use COM automation to edit documents **while they're open in Word** — no file locking issues, real-time tracked changes, comments, layout control, and per-operation undo.
 
 ## What's New vs the Original
 
-This project builds on [GongRzhe/Office-Word-MCP-Server](https://github.com/GongRzhe/Office-Word-MCP-Server) (54 tools) and adds 45 new tools:
+This project builds on [GongRzhe/Office-Word-MCP-Server](https://github.com/GongRzhe/Office-Word-MCP-Server) (54 tools) and adds 48 new tools:
 
 | Category | New Tools | What They Do |
 |----------|-----------|--------------|
-| Live editing (COM) | `word_live_insert_text`, `word_live_delete_text`, `word_live_format_text`, `word_live_add_table` | Edit documents open in Word — no lock conflicts |
-| Live reading (COM) | `word_live_get_text`, `word_live_get_info`, `word_live_find_text` | Read from open documents |
+| Live editing (COM) | `word_live_insert_text`, `word_live_delete_text`, `word_live_format_text`, `word_live_add_table`, `word_live_undo` | Edit documents open in Word — no lock conflicts, per-operation undo |
+| Live reading (COM) | `word_live_get_text`, `word_live_get_page_text`, `word_live_get_info`, `word_live_find_text`, `word_live_get_undo_history` | Read from open documents (page-level text with char offsets, undo stack) |
 | Tracked changes | `track_replace`, `track_insert`, `track_delete`, `list_tracked_changes`, `accept_tracked_changes`, `reject_tracked_changes` | Full revision tracking via OOXML manipulation |
 | Live revisions (COM) | `word_live_list_revisions`, `word_live_accept_revisions`, `word_live_reject_revisions` | Manage tracked changes in open documents |
 | Comments | `add_comment`, `word_live_add_comment`, `word_live_get_comments` | Write and read comments (both file-based and COM) |
@@ -200,9 +200,9 @@ These work on Windows, macOS, and Linux using python-docx.
 
 </details>
 
-### Windows Live Tools (24)
+### Windows Live Tools (27)
 
-These require Windows with Microsoft Word installed. They operate on documents **currently open in Word** via COM automation — no file locking issues.
+These require Windows with Microsoft Word installed. They operate on documents **currently open in Word** via COM automation — no file locking issues. All destructive tools are wrapped with `UndoRecord` — each tool call appears as a single Ctrl+Z entry in Word's undo stack.
 
 | Tool | Description |
 |------|-------------|
@@ -215,11 +215,14 @@ These require Windows with Microsoft Word installed. They operate on documents *
 | `word_live_add_table` | Add a table |
 | `word_live_apply_list` | Apply or remove bullet/numbered list formatting |
 | `word_live_setup_heading_numbering` | Apply multilevel list numbering to headings |
+| `word_live_undo` | Undo last N operations (each tool call = one undo entry) |
 | **Reading** | |
 | `word_live_get_text` | Get all text paragraph by paragraph |
+| `word_live_get_page_text` | Get text from specific page(s) with char offsets for chaining |
 | `word_live_get_paragraph_format` | Inspect paragraph formatting (font, spacing, list info) |
 | `word_live_get_info` | Get document metadata (pages, words, sections) |
 | `word_live_find_text` | Find text with context |
+| `word_live_get_undo_history` | List undo stack entries (shows MCP operation names) |
 | **Comments & Revisions** | |
 | `word_live_get_comments` | Get all comments |
 | `word_live_add_comment` | Add a comment |

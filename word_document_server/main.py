@@ -1083,6 +1083,47 @@ def register_tools():
             filename, author, revision_ids
         )
 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Get Page Text",
+            readOnlyHint=True,
+        ),
+        description=live_read_tools.word_live_get_page_text.__doc__,
+    )
+    def word_live_get_page_text(
+        filename: str = None,
+        page: int = 1,
+        end_page: int = None,
+    ):
+        return live_read_tools.word_live_get_page_text(
+            filename, page, end_page,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Get Undo History",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_get_undo_history(filename: str = None):
+        """[Windows only] Get the undo stack from a Word document open in Word.
+        Shows MCP tool operations as named entries. Requires Word running."""
+        return live_read_tools.word_live_get_undo_history(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Undo",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_undo(
+        filename: str = None,
+        times: int = 1,
+    ):
+        """[Windows only] Undo the last N operations in a Word document open in Word.
+        Each MCP tool call is one undo entry. Requires Word running."""
+        return live_tools.word_live_undo(filename, times)
+
     # --- Live layout tools (Windows only, requires Word running) ---
 
     @mcp.tool(

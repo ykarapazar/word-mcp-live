@@ -6,6 +6,7 @@ Only works on Windows with pywin32 installed.
 
 import os
 import sys
+from contextlib import contextmanager
 
 
 def get_word_app():
@@ -64,3 +65,36 @@ def find_document(app, filename: str = None):
         f"Document '{filename}' is not open in Word. "
         f"Open documents: {open_docs}"
     )
+
+
+@contextmanager
+def undo_record(app, name: str):
+    """Wrap a block of COM mutations in a single Word UndoRecord.
+
+    Groups all changes into one Ctrl+Z entry in Word's undo stack.
+    The undo record name appears in Edit > Undo and in the undo history.
+    Degrades gracefully on Word 2007 or earlier (no UndoRecord support).
+
+    Args:
+        app: Word.Application COM object.
+        name: Label for the undo entry (truncated to 64 chars by Word).
+
+    Usage::
+
+        with undo_record(app, "MCP: Insert Text"):
+            doc.Range(0, 0).InsertBefore("Hello")
+    """
+    rec = None
+    try:
+        rec = app.UndoRecord
+        rec.StartCustomRecord(name[:64])
+    except Exception:
+        rec = None  # Word 2007 or earlier — proceed without
+    try:
+        yield
+    finally:
+        if rec is not None:
+            try:
+                rec.EndCustomRecord()
+            except Exception:
+                pass

@@ -43,7 +43,7 @@ async def word_live_set_page_layout(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -53,36 +53,37 @@ async def word_live_set_page_layout(
                 "error": f"Section {section_index} out of range (1-{doc.Sections.Count})"
             })
 
-        ps = doc.Sections(section_index).PageSetup
-        changes = []
+        with undo_record(app, "MCP: Set Page Layout"):
+            ps = doc.Sections(section_index).PageSetup
+            changes = []
 
-        if orientation is not None:
-            # wdOrientPortrait=0, wdOrientLandscape=1
-            if orientation.lower() == "landscape":
-                ps.Orientation = 1
-                changes.append("orientation=landscape")
-            elif orientation.lower() == "portrait":
-                ps.Orientation = 0
-                changes.append("orientation=portrait")
+            if orientation is not None:
+                # wdOrientPortrait=0, wdOrientLandscape=1
+                if orientation.lower() == "landscape":
+                    ps.Orientation = 1
+                    changes.append("orientation=landscape")
+                elif orientation.lower() == "portrait":
+                    ps.Orientation = 0
+                    changes.append("orientation=portrait")
 
-        if page_width_inches is not None:
-            ps.PageWidth = page_width_inches * _PTS_PER_INCH
-            changes.append(f"width={page_width_inches}in")
-        if page_height_inches is not None:
-            ps.PageHeight = page_height_inches * _PTS_PER_INCH
-            changes.append(f"height={page_height_inches}in")
-        if margin_top_inches is not None:
-            ps.TopMargin = margin_top_inches * _PTS_PER_INCH
-            changes.append(f"margin_top={margin_top_inches}in")
-        if margin_bottom_inches is not None:
-            ps.BottomMargin = margin_bottom_inches * _PTS_PER_INCH
-            changes.append(f"margin_bottom={margin_bottom_inches}in")
-        if margin_left_inches is not None:
-            ps.LeftMargin = margin_left_inches * _PTS_PER_INCH
-            changes.append(f"margin_left={margin_left_inches}in")
-        if margin_right_inches is not None:
-            ps.RightMargin = margin_right_inches * _PTS_PER_INCH
-            changes.append(f"margin_right={margin_right_inches}in")
+            if page_width_inches is not None:
+                ps.PageWidth = page_width_inches * _PTS_PER_INCH
+                changes.append(f"width={page_width_inches}in")
+            if page_height_inches is not None:
+                ps.PageHeight = page_height_inches * _PTS_PER_INCH
+                changes.append(f"height={page_height_inches}in")
+            if margin_top_inches is not None:
+                ps.TopMargin = margin_top_inches * _PTS_PER_INCH
+                changes.append(f"margin_top={margin_top_inches}in")
+            if margin_bottom_inches is not None:
+                ps.BottomMargin = margin_bottom_inches * _PTS_PER_INCH
+                changes.append(f"margin_bottom={margin_bottom_inches}in")
+            if margin_left_inches is not None:
+                ps.LeftMargin = margin_left_inches * _PTS_PER_INCH
+                changes.append(f"margin_left={margin_left_inches}in")
+            if margin_right_inches is not None:
+                ps.RightMargin = margin_right_inches * _PTS_PER_INCH
+                changes.append(f"margin_right={margin_right_inches}in")
 
         return json.dumps({
             "success": True,
@@ -120,7 +121,7 @@ async def word_live_add_header_footer(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -130,28 +131,29 @@ async def word_live_add_header_footer(
                 "error": f"Section {section_index} out of range (1-{doc.Sections.Count})"
             })
 
-        # Alignment map: 0=left, 1=center, 2=right
-        align_map = {"left": 0, "center": 1, "right": 2}
-        added = []
+        with undo_record(app, "MCP: Add Header/Footer"):
+            # Alignment map: 0=left, 1=center, 2=right
+            align_map = {"left": 0, "center": 1, "right": 2}
+            added = []
 
-        # wdHeaderFooterPrimary = 1
-        section = doc.Sections(section_index)
+            # wdHeaderFooterPrimary = 1
+            section = doc.Sections(section_index)
 
-        if header_text is not None:
-            hdr = section.Headers(1)  # Primary header
-            hdr.Range.Text = header_text
-            hdr.Range.ParagraphFormat.Alignment = align_map.get(
-                header_alignment.lower(), 1
-            )
-            added.append("header")
+            if header_text is not None:
+                hdr = section.Headers(1)  # Primary header
+                hdr.Range.Text = header_text
+                hdr.Range.ParagraphFormat.Alignment = align_map.get(
+                    header_alignment.lower(), 1
+                )
+                added.append("header")
 
-        if footer_text is not None:
-            ftr = section.Footers(1)  # Primary footer
-            ftr.Range.Text = footer_text
-            ftr.Range.ParagraphFormat.Alignment = align_map.get(
-                footer_alignment.lower(), 1
-            )
-            added.append("footer")
+            if footer_text is not None:
+                ftr = section.Footers(1)  # Primary footer
+                ftr.Range.Text = footer_text
+                ftr.Range.ParagraphFormat.Alignment = align_map.get(
+                    footer_alignment.lower(), 1
+                )
+                added.append("footer")
 
         return json.dumps({
             "success": True,
@@ -191,7 +193,7 @@ async def word_live_add_page_numbers(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -201,49 +203,50 @@ async def word_live_add_page_numbers(
                 "error": f"Section {section_index} out of range (1-{doc.Sections.Count})"
             })
 
-        # PageNumberAlignment: 0=left, 1=center, 2=right
-        align_map = {"left": 0, "center": 1, "right": 2}
-        pn_alignment = align_map.get(alignment.lower(), 1)
+        with undo_record(app, "MCP: Add Page Numbers"):
+            # PageNumberAlignment: 0=left, 1=center, 2=right
+            align_map = {"left": 0, "center": 1, "right": 2}
+            pn_alignment = align_map.get(alignment.lower(), 1)
 
-        section = doc.Sections(section_index)
-        # wdHeaderFooterPrimary = 1
-        target = section.Headers(1) if position == "header" else section.Footers(1)
+            section = doc.Sections(section_index)
+            # wdHeaderFooterPrimary = 1
+            target = section.Headers(1) if position == "header" else section.Footers(1)
 
-        # Add page numbers via PageNumbers collection
-        target.PageNumbers.Add(PageNumberAlignment=pn_alignment)
+            # Add page numbers via PageNumbers collection
+            target.PageNumbers.Add(PageNumberAlignment=pn_alignment)
 
-        # Add prefix/suffix/total by editing the range
-        if prefix or suffix or include_total:
-            rng = target.Range
-            existing_text = rng.Text
+            # Add prefix/suffix/total by editing the range
+            if prefix or suffix or include_total:
+                rng = target.Range
+                existing_text = rng.Text
 
-            # Build the text with field codes
-            # Clear and rebuild
-            rng.Delete()
+                # Build the text with field codes
+                # Clear and rebuild
+                rng.Delete()
 
-            if prefix:
-                rng.InsertAfter(prefix)
+                if prefix:
+                    rng.InsertAfter(prefix)
 
-            # Insert PAGE field
-            # wdFieldPage = 33
-            rng.Collapse(0)  # wdCollapseEnd
-            app.Selection.GoTo(What=1, Name=str(section_index))  # navigate to section
-            field_range = target.Range
-            field_range.Collapse(0)
-            doc.Fields.Add(Range=field_range, Type=33)  # wdFieldPage
+                # Insert PAGE field
+                # wdFieldPage = 33
+                rng.Collapse(0)  # wdCollapseEnd
+                app.Selection.GoTo(What=1, Name=str(section_index))  # navigate to section
+                field_range = target.Range
+                field_range.Collapse(0)
+                doc.Fields.Add(Range=field_range, Type=33)  # wdFieldPage
 
-            if include_total:
-                end_range = target.Range
-                end_range.Collapse(0)
-                end_range.InsertAfter(" / ")
-                end_range = target.Range
-                end_range.Collapse(0)
-                doc.Fields.Add(Range=end_range, Type=26)  # wdFieldNumPages
+                if include_total:
+                    end_range = target.Range
+                    end_range.Collapse(0)
+                    end_range.InsertAfter(" / ")
+                    end_range = target.Range
+                    end_range.Collapse(0)
+                    doc.Fields.Add(Range=end_range, Type=26)  # wdFieldNumPages
 
-            if suffix:
-                end_range = target.Range
-                end_range.Collapse(0)
-                end_range.InsertAfter(suffix)
+                if suffix:
+                    end_range = target.Range
+                    end_range.Collapse(0)
+                    end_range.InsertAfter(suffix)
 
         return json.dumps({
             "success": True,
@@ -275,7 +278,7 @@ async def word_live_add_section_break(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -293,10 +296,11 @@ async def word_live_add_section_break(
                 "error": f"Invalid break_type: {break_type}. Use: {list(type_map.keys())}"
             })
 
-        # Insert at end of document
-        end_pos = doc.Content.End - 1
-        rng = doc.Range(end_pos, end_pos)
-        rng.InsertBreak(Type=type_map[break_type])
+        with undo_record(app, "MCP: Add Section Break"):
+            # Insert at end of document
+            end_pos = doc.Content.End - 1
+            rng = doc.Range(end_pos, end_pos)
+            rng.InsertBreak(Type=type_map[break_type])
 
         return json.dumps({
             "success": True,
@@ -342,7 +346,7 @@ async def word_live_set_paragraph_spacing(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -371,18 +375,19 @@ async def word_live_set_paragraph_spacing(
         else:
             indices = range(1, total + 1)
 
-        count = 0
-        for i in indices:
-            pf = doc.Paragraphs(i).Format
-            if space_before_pt is not None:
-                pf.SpaceBefore = space_before_pt
-            if space_after_pt is not None:
-                pf.SpaceAfter = space_after_pt
-            if line_spacing_rule is not None and line_spacing_rule in rule_map:
-                pf.LineSpacingRule = rule_map[line_spacing_rule]
-            if line_spacing is not None:
-                pf.LineSpacing = line_spacing
-            count += 1
+        with undo_record(app, "MCP: Set Paragraph Spacing"):
+            count = 0
+            for i in indices:
+                pf = doc.Paragraphs(i).Format
+                if space_before_pt is not None:
+                    pf.SpaceBefore = space_before_pt
+                if space_after_pt is not None:
+                    pf.SpaceAfter = space_after_pt
+                if line_spacing_rule is not None and line_spacing_rule in rule_map:
+                    pf.LineSpacingRule = rule_map[line_spacing_rule]
+                if line_spacing is not None:
+                    pf.LineSpacing = line_spacing
+                count += 1
 
         return json.dumps({
             "success": True,
@@ -416,7 +421,7 @@ async def word_live_add_bookmark(
         return json.dumps({"error": "bookmark_name is required"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -426,8 +431,9 @@ async def word_live_add_bookmark(
                 "error": f"paragraph_index {paragraph_index} out of range (1-{doc.Paragraphs.Count})"
             })
 
-        rng = doc.Paragraphs(paragraph_index).Range
-        doc.Bookmarks.Add(bookmark_name, rng)
+        with undo_record(app, "MCP: Add Bookmark"):
+            rng = doc.Paragraphs(paragraph_index).Range
+            doc.Bookmarks.Add(bookmark_name, rng)
 
         return json.dumps({
             "success": True,
@@ -465,7 +471,7 @@ async def word_live_add_watermark(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -475,39 +481,40 @@ async def word_live_add_watermark(
                 "error": f"Section {section_index} out of range (1-{doc.Sections.Count})"
             })
 
-        section = doc.Sections(section_index)
-        header = section.Headers(1)  # wdHeaderFooterPrimary
+        with undo_record(app, "MCP: Add Watermark"):
+            section = doc.Sections(section_index)
+            header = section.Headers(1)  # wdHeaderFooterPrimary
 
-        # Parse color
-        c = font_color.lstrip("#")
-        r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
-        rgb_color = r + (g << 8) + (b << 16)
+            # Parse color
+            c = font_color.lstrip("#")
+            r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+            rgb_color = r + (g << 8) + (b << 16)
 
-        # AddTextEffect(PresetTextEffect, Text, FontName, FontSize,
-        #               FontBold, FontItalic, Left, Top)
-        # COM requires positional args
-        shape = header.Shapes.AddTextEffect(
-            0, text, "Calibri", font_size, False, False, 0, 0
-        )
+            # AddTextEffect(PresetTextEffect, Text, FontName, FontSize,
+            #               FontBold, FontItalic, Left, Top)
+            # COM requires positional args
+            shape = header.Shapes.AddTextEffect(
+                0, text, "Calibri", font_size, False, False, 0, 0
+            )
 
-        # Configure shape
-        shape.Fill.ForeColor.RGB = rgb_color
-        shape.Fill.Transparency = 0.5
-        shape.Line.Visible = False  # msoFalse
-        shape.Rotation = rotation
-        shape.LockAspectRatio = False
+            # Configure shape
+            shape.Fill.ForeColor.RGB = rgb_color
+            shape.Fill.Transparency = 0.5
+            shape.Line.Visible = False  # msoFalse
+            shape.Rotation = rotation
+            shape.LockAspectRatio = False
 
-        # Position relative to page center
-        # msoRelativeHorizontalPositionMargin = 0
-        # msoRelativeVerticalPositionMargin = 0
-        shape.RelativeHorizontalPosition = 0
-        shape.RelativeVerticalPosition = 0
-        shape.Left = -999995  # wdShapeCenter (magic value for centering)
-        shape.Top = -999995  # wdShapeCenter
+            # Position relative to page center
+            # msoRelativeHorizontalPositionMargin = 0
+            # msoRelativeVerticalPositionMargin = 0
+            shape.RelativeHorizontalPosition = 0
+            shape.RelativeVerticalPosition = 0
+            shape.Left = -999995  # wdShapeCenter (magic value for centering)
+            shape.Top = -999995  # wdShapeCenter
 
-        # Send behind text
-        shape.WrapFormat.Type = 3  # wdWrapBehind
-        shape.WrapFormat.AllowOverlap = True
+            # Send behind text
+            shape.WrapFormat.Type = 3  # wdWrapBehind
+            shape.WrapFormat.AllowOverlap = True
 
         return json.dumps({
             "success": True,

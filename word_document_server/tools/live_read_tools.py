@@ -359,7 +359,7 @@ async def word_live_add_comment(
         return json.dumps({"error": "Comment text is required"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -378,13 +378,14 @@ async def word_live_add_comment(
                 "error": "Provide either start/end positions or paragraph_index"
             })
 
-        # Save and restore author
-        prev_author = app.UserName
-        app.UserName = author
-        try:
-            comment = doc.Comments.Add(rng, text)
-        finally:
-            app.UserName = prev_author
+        with undo_record(app, "MCP: Add Comment"):
+            # Save and restore author
+            prev_author = app.UserName
+            app.UserName = author
+            try:
+                comment = doc.Comments.Add(rng, text)
+            finally:
+                app.UserName = prev_author
 
         return json.dumps({
             "success": True,
@@ -482,49 +483,50 @@ async def word_live_accept_revisions(
         return json.dumps({"error": "Live tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
 
-        if revision_ids is not None:
-            # Accept specific revisions (process in reverse to preserve indices)
-            accepted = 0
-            for rid in sorted(revision_ids, reverse=True):
-                if 1 <= rid <= doc.Revisions.Count:
-                    doc.Revisions(rid).Accept()
-                    accepted += 1
+        with undo_record(app, "MCP: Accept Revisions"):
+            if revision_ids is not None:
+                # Accept specific revisions (process in reverse to preserve indices)
+                accepted = 0
+                for rid in sorted(revision_ids, reverse=True):
+                    if 1 <= rid <= doc.Revisions.Count:
+                        doc.Revisions(rid).Accept()
+                        accepted += 1
+                return json.dumps({
+                    "success": True,
+                    "document": doc.Name,
+                    "accepted": accepted,
+                    "mode": "specific_ids",
+                })
+
+            if author:
+                # Accept revisions by author (iterate in reverse)
+                accepted = 0
+                for i in range(doc.Revisions.Count, 0, -1):
+                    rev = doc.Revisions(i)
+                    if str(rev.Author) == author:
+                        rev.Accept()
+                        accepted += 1
+                return json.dumps({
+                    "success": True,
+                    "document": doc.Name,
+                    "accepted": accepted,
+                    "mode": f"by_author:{author}",
+                })
+
+            # Accept all
+            total = doc.Revisions.Count
+            doc.AcceptAllRevisions()
             return json.dumps({
                 "success": True,
                 "document": doc.Name,
-                "accepted": accepted,
-                "mode": "specific_ids",
+                "accepted": total,
+                "mode": "all",
             })
-
-        if author:
-            # Accept revisions by author (iterate in reverse)
-            accepted = 0
-            for i in range(doc.Revisions.Count, 0, -1):
-                rev = doc.Revisions(i)
-                if str(rev.Author) == author:
-                    rev.Accept()
-                    accepted += 1
-            return json.dumps({
-                "success": True,
-                "document": doc.Name,
-                "accepted": accepted,
-                "mode": f"by_author:{author}",
-            })
-
-        # Accept all
-        total = doc.Revisions.Count
-        doc.AcceptAllRevisions()
-        return json.dumps({
-            "success": True,
-            "document": doc.Name,
-            "accepted": total,
-            "mode": "all",
-        })
 
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -549,46 +551,201 @@ async def word_live_reject_revisions(
         return json.dumps({"error": "Live tools are only available on Windows"})
 
     try:
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        with undo_record(app, "MCP: Reject Revisions"):
+            if revision_ids is not None:
+                rejected = 0
+                for rid in sorted(revision_ids, reverse=True):
+                    if 1 <= rid <= doc.Revisions.Count:
+                        doc.Revisions(rid).Reject()
+                        rejected += 1
+                return json.dumps({
+                    "success": True,
+                    "document": doc.Name,
+                    "rejected": rejected,
+                    "mode": "specific_ids",
+                })
+
+            if author:
+                rejected = 0
+                for i in range(doc.Revisions.Count, 0, -1):
+                    rev = doc.Revisions(i)
+                    if str(rev.Author) == author:
+                        rev.Reject()
+                        rejected += 1
+                return json.dumps({
+                    "success": True,
+                    "document": doc.Name,
+                    "rejected": rejected,
+                    "mode": f"by_author:{author}",
+                })
+
+            total = doc.Revisions.Count
+            doc.RejectAllRevisions()
+            return json.dumps({
+                "success": True,
+                "document": doc.Name,
+                "rejected": total,
+                "mode": "all",
+            })
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_get_page_text(
+    filename: str = None,
+    page: int = 1,
+    end_page: int = None,
+) -> str:
+    """[Windows only] Get text from specific page(s) of an open Word document.
+
+    Returns paragraphs on the requested page(s) with char_start/char_end offsets
+    that can be passed directly to word_live_format_text, word_live_delete_text, etc.
+
+    Uses Word's GoTo API to find page boundaries. For long legal documents, this
+    is much more efficient than reading all paragraphs.
+
+    Args:
+        filename: Document name or path (None = active document).
+        page: Page number to read (1-indexed, required).
+        end_page: Last page to read (inclusive). If None, reads only `page`.
+
+    Returns:
+        JSON with paragraphs list, each containing index, text, char_start, char_end.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    if page < 1:
+        return json.dumps({"error": "page must be >= 1"})
+
+    if end_page is not None and end_page < page:
+        return json.dumps({"error": "end_page must be >= page"})
+
+    try:
         from word_document_server.core.word_com import get_word_app, find_document
 
         app = get_word_app()
         doc = find_document(app, filename)
 
-        if revision_ids is not None:
-            rejected = 0
-            for rid in sorted(revision_ids, reverse=True):
-                if 1 <= rid <= doc.Revisions.Count:
-                    doc.Revisions(rid).Reject()
-                    rejected += 1
+        # wdStatisticPages = 2
+        total_pages = doc.ComputeStatistics(2)
+
+        if page > total_pages:
             return json.dumps({
-                "success": True,
-                "document": doc.Name,
-                "rejected": rejected,
-                "mode": "specific_ids",
+                "error": f"Page {page} out of range (document has {total_pages} pages)"
             })
 
-        if author:
-            rejected = 0
-            for i in range(doc.Revisions.Count, 0, -1):
-                rev = doc.Revisions(i)
-                if str(rev.Author) == author:
-                    rev.Reject()
-                    rejected += 1
-            return json.dumps({
-                "success": True,
-                "document": doc.Name,
-                "rejected": rejected,
-                "mode": f"by_author:{author}",
+        if end_page is None:
+            end_page = page
+
+        if end_page > total_pages:
+            end_page = total_pages
+
+        # wdGoToPage=1, wdGoToAbsolute=1
+        # Get start of requested page
+        page_start_range = doc.GoTo(What=1, Which=1, Count=page)
+        range_start = page_start_range.Start
+
+        # Get start of page after end_page (or end of doc)
+        if end_page < total_pages:
+            next_page_range = doc.GoTo(What=1, Which=1, Count=end_page + 1)
+            range_end = next_page_range.Start
+        else:
+            range_end = doc.Content.End
+
+        # Collect paragraphs within the page range
+        paragraphs = []
+        for i in range(1, doc.Paragraphs.Count + 1):
+            para = doc.Paragraphs(i)
+            p_start = para.Range.Start
+            p_end = para.Range.End
+
+            # Skip paragraphs entirely before our range
+            if p_end <= range_start:
+                continue
+            # Stop once we pass our range
+            if p_start >= range_end:
+                break
+
+            text = para.Range.Text.rstrip("\r\x07")
+            paragraphs.append({
+                "index": i,
+                "text": text,
+                "char_start": p_start,
+                "char_end": p_end,
             })
 
-        total = doc.Revisions.Count
-        doc.RejectAllRevisions()
+        page_label = f"{page}" if page == end_page else f"{page}-{end_page}"
         return json.dumps({
             "success": True,
             "document": doc.Name,
-            "rejected": total,
-            "mode": "all",
-        })
+            "pages": page_label,
+            "total_pages": total_pages,
+            "paragraph_count": len(paragraphs),
+            "range_start": range_start,
+            "range_end": range_end,
+            "paragraphs": paragraphs,
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_get_undo_history(
+    filename: str = None,
+) -> str:
+    """[Windows only] Get the undo stack names from an open Word document.
+
+    Uses Word's CommandBars to read the undo dropdown list. Each MCP tool call
+    that was wrapped with undo_record will appear as "MCP: <tool name>".
+    Degrades gracefully if the undo list is not accessible.
+
+    Args:
+        filename: Document name or path (None = active document).
+
+    Returns:
+        JSON with undo_entries list (most recent first) and count.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        entries = []
+        try:
+            # CommandBar control ID 128 = Undo split dropdown (Type=6)
+            # Must specify Type=6 (msoControlSplitDropdown) — without it,
+            # FindControl may return a plain button (Type=1) that lacks ListCount.
+            undo_control = app.CommandBars.FindControl(Type=6, Id=128)
+            if undo_control is not None:
+                for i in range(1, undo_control.ListCount + 1):
+                    entries.append(undo_control.List(i))
+        except Exception:
+            # Undocumented API — may not be available in all Word versions
+            return json.dumps({
+                "success": True,
+                "document": doc.Name,
+                "undo_entries": [],
+                "count": 0,
+                "note": "Undo history not accessible in this Word version",
+            })
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "undo_entries": entries,
+            "count": len(entries),
+        }, ensure_ascii=False)
 
     except Exception as e:
         return json.dumps({"error": str(e)})
