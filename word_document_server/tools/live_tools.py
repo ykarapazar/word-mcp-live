@@ -310,18 +310,23 @@ async def word_live_setup_heading_numbering(
 ) -> str:
     """[Windows only] Set up auto-numbered headings with multilevel list (1. / 1.1).
 
-    Customizes Heading 1 and Heading 2 styles to Karapazar house style
-    (Cambria, justified, proper sizes), applies them to specified paragraphs,
-    links a multilevel numbered list, and optionally strips manual numbering.
+    Customizes Heading 1 and Heading 2 styles to Karapazar house style before applying:
+    - Heading 1: Cambria 13pt Bold, #0D0D0D, justify, 18pt before, 6pt after, 1.15 line spacing
+    - Heading 2: Cambria 11pt Bold, #0D0D0D, justify, 12pt before, 6pt after, 1.15 line spacing
+
+    Creates a multilevel list template: Level 1 = "1." linked to Heading 1,
+    Level 2 = "1.1" linked to Heading 2. Applies styles and numbering to the
+    specified paragraphs, then optionally strips manual number prefixes
+    (regex: ^\d+(\.\d+)*\.?\s+ — matches "1. ", "2.3 ", "10. ", etc.).
 
     Args:
         filename: Document name or path (None = active document).
         h1_paragraphs: List of 1-indexed paragraph numbers for Heading 1 (main sections).
         h2_paragraphs: List of 1-indexed paragraph numbers for Heading 2 (sub-sections).
-        strip_manual_numbers: Remove leading "N." or "N.N" text from headings.
+        strip_manual_numbers: Remove leading "N." or "N.N" text from headings (default True).
 
     Returns:
-        JSON with result info.
+        JSON with h1_applied, h2_applied, and stripped counts.
     """
     import re
 

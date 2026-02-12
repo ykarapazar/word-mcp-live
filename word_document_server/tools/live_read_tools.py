@@ -52,8 +52,14 @@ async def word_live_get_paragraph_format(
 ) -> str:
     """[Windows only] Inspect paragraph formatting properties for diagnostics.
 
-    Returns font, spacing, alignment, page break before, list info, and style
-    for each paragraph in the range. Useful for diagnosing layout issues.
+    Returns detailed formatting info for each paragraph in the range. Essential for
+    debugging layout issues like unexpected page breaks (caused by keep_with_next chains),
+    broken list formatting, wrong styles, or inconsistent fonts.
+
+    Per-paragraph fields returned: index, text_preview (first 80 chars), char_start, char_end,
+    style, font_name, font_size, bold, italic, alignment, space_before_pt, space_after_pt,
+    line_spacing, line_spacing_rule, page_break_before, keep_with_next, keep_together.
+    Also: list_type, list_level, list_string (if paragraph is in a list), highlight_color.
 
     Args:
         filename: Document name or path (None = active document).
