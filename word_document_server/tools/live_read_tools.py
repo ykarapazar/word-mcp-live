@@ -45,6 +45,109 @@ async def word_live_get_text(filename: str = None) -> str:
         return json.dumps({"error": str(e)})
 
 
+async def word_live_get_paragraph_format(
+    filename: str = None,
+    start_paragraph: int = None,
+    end_paragraph: int = None,
+) -> str:
+    """[Windows only] Inspect paragraph formatting properties for diagnostics.
+
+    Returns font, spacing, alignment, page break before, list info, and style
+    for each paragraph in the range. Useful for diagnosing layout issues.
+
+    Args:
+        filename: Document name or path (None = active document).
+        start_paragraph: First paragraph (1-indexed, required).
+        end_paragraph: Last paragraph (1-indexed, defaults to start_paragraph).
+
+    Returns:
+        JSON with formatting details per paragraph.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    if start_paragraph is None:
+        return json.dumps({"error": "start_paragraph is required (1-indexed)"})
+
+    if end_paragraph is None:
+        end_paragraph = start_paragraph
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        total_paras = doc.Paragraphs.Count
+        if start_paragraph < 1 or end_paragraph > total_paras:
+            return json.dumps({
+                "error": f"Range {start_paragraph}-{end_paragraph} out of bounds (doc has {total_paras} paragraphs)"
+            })
+
+        ALIGN_NAMES = {0: "left", 1: "center", 2: "right", 3: "justify", 4: "distribute"}
+        SPACING_RULE_NAMES = {
+            0: "single", 1: "1.5_lines", 2: "double",
+            3: "at_least", 4: "exactly", 5: "multiple",
+        }
+
+        results = []
+        for i in range(start_paragraph, end_paragraph + 1):
+            para = doc.Paragraphs(i)
+            rng = para.Range
+            fmt = para.Format
+            text = rng.Text.rstrip("\r\x07")
+            preview = text[:80] + ("..." if len(text) > 80 else "")
+
+            info = {
+                "index": i,
+                "text_preview": preview,
+                "char_start": rng.Start,
+                "char_end": rng.End,
+                "style": str(rng.Style) if rng.Style else "",
+                "font_name": str(rng.Font.Name) if rng.Font.Name else "",
+                "font_size": rng.Font.Size if rng.Font.Size else None,
+                "bold": bool(rng.Font.Bold) if rng.Font.Bold != 9999999 else "mixed",
+                "italic": bool(rng.Font.Italic) if rng.Font.Italic != 9999999 else "mixed",
+                "alignment": ALIGN_NAMES.get(fmt.Alignment, str(fmt.Alignment)),
+                "space_before_pt": fmt.SpaceBefore,
+                "space_after_pt": fmt.SpaceAfter,
+                "line_spacing": fmt.LineSpacing,
+                "line_spacing_rule": SPACING_RULE_NAMES.get(fmt.LineSpacingRule, str(fmt.LineSpacingRule)),
+                "page_break_before": bool(fmt.PageBreakBefore),
+                "keep_with_next": bool(fmt.KeepWithNext),
+                "keep_together": bool(fmt.KeepTogether),
+            }
+
+            # List info
+            try:
+                lf = rng.ListFormat
+                if lf.ListType > 0:
+                    info["list_type"] = {1: "bullet", 2: "simple_number", 3: "upper_roman",
+                                          4: "lower_roman", 5: "upper_letter", 6: "lower_letter"
+                                          }.get(lf.ListType, f"type_{lf.ListType}")
+                    info["list_level"] = lf.ListLevelNumber
+                    info["list_string"] = lf.ListString
+            except Exception:
+                pass
+
+            # Highlight
+            try:
+                info["highlight_color"] = rng.HighlightColorIndex
+            except Exception:
+                pass
+
+            results.append(info)
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "paragraphs": results,
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 async def word_live_get_info(filename: str = None) -> str:
     """Get document info from an open Word document.
 

@@ -936,6 +936,23 @@ def register_tools():
             level, remove, continue_previous, track_changes,
         )
 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Setup Heading Numbering",
+            destructiveHint=True,
+        ),
+        description=live_tools.word_live_setup_heading_numbering.__doc__,
+    )
+    def word_live_setup_heading_numbering(
+        filename: str = None,
+        h1_paragraphs: list = None,
+        h2_paragraphs: list = None,
+        strip_manual_numbers: bool = True,
+    ):
+        return live_tools.word_live_setup_heading_numbering(
+            filename, h1_paragraphs, h2_paragraphs, strip_manual_numbers,
+        )
+
     # --- Live read tools (Windows only, requires Word running) ---
 
     @mcp.tool(
@@ -947,6 +964,22 @@ def register_tools():
     def word_live_get_text(filename: str = None):
         """[Windows only] Get all text from a Word document open in Word, paragraph by paragraph. Requires Word running."""
         return live_read_tools.word_live_get_text(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Get Paragraph Format",
+            readOnlyHint=True,
+        ),
+        description=live_read_tools.word_live_get_paragraph_format.__doc__,
+    )
+    def word_live_get_paragraph_format(
+        filename: str = None,
+        start_paragraph: int = None,
+        end_paragraph: int = None,
+    ):
+        return live_read_tools.word_live_get_paragraph_format(
+            filename, start_paragraph, end_paragraph,
+        )
 
     @mcp.tool(
         annotations=ToolAnnotations(

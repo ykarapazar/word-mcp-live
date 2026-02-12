@@ -302,6 +302,159 @@ async def word_live_apply_list(
         return json.dumps({"error": str(e)})
 
 
+async def word_live_setup_heading_numbering(
+    filename: str = None,
+    h1_paragraphs: list = None,
+    h2_paragraphs: list = None,
+    strip_manual_numbers: bool = True,
+) -> str:
+    """[Windows only] Set up auto-numbered headings with multilevel list (1. / 1.1).
+
+    Customizes Heading 1 and Heading 2 styles to Karapazar house style
+    (Cambria, justified, proper sizes), applies them to specified paragraphs,
+    links a multilevel numbered list, and optionally strips manual numbering.
+
+    Args:
+        filename: Document name or path (None = active document).
+        h1_paragraphs: List of 1-indexed paragraph numbers for Heading 1 (main sections).
+        h2_paragraphs: List of 1-indexed paragraph numbers for Heading 2 (sub-sections).
+        strip_manual_numbers: Remove leading "N." or "N.N" text from headings.
+
+    Returns:
+        JSON with result info.
+    """
+    import re
+
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools only on Windows"})
+
+    if not h1_paragraphs and not h2_paragraphs:
+        return json.dumps({"error": "Provide h1_paragraphs and/or h2_paragraphs"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        color_int = 0x0D + (0x0D << 8) + (0x0D << 16)  # #0D0D0D in Word RGB
+
+        # --- Customize Heading 1 style ---
+        s1 = doc.Styles(-2)  # wdStyleHeading1
+        s1.Font.Name = "Cambria"
+        s1.Font.Size = 13
+        s1.Font.Bold = True
+        s1.Font.Italic = False
+        s1.Font.Color = color_int
+        s1.ParagraphFormat.Alignment = 3  # justify
+        s1.ParagraphFormat.SpaceBefore = 18
+        s1.ParagraphFormat.SpaceAfter = 6
+        s1.ParagraphFormat.LineSpacingRule = 5  # multiple
+        s1.ParagraphFormat.LineSpacing = 13.8
+        s1.ParagraphFormat.KeepWithNext = True
+        s1.ParagraphFormat.KeepTogether = False
+
+        # --- Customize Heading 2 style ---
+        s2 = doc.Styles(-3)  # wdStyleHeading2
+        s2.Font.Name = "Cambria"
+        s2.Font.Size = 11
+        s2.Font.Bold = True
+        s2.Font.Italic = False
+        s2.Font.Color = color_int
+        s2.ParagraphFormat.Alignment = 3
+        s2.ParagraphFormat.SpaceBefore = 12
+        s2.ParagraphFormat.SpaceAfter = 6
+        s2.ParagraphFormat.LineSpacingRule = 5
+        s2.ParagraphFormat.LineSpacing = 13.8
+        s2.ParagraphFormat.KeepWithNext = True
+        s2.ParagraphFormat.KeepTogether = False
+
+        # --- Create multilevel list template ---
+        lt = doc.ListTemplates.Add(OutlineNumbered=True)
+
+        # Level 1: "1." linked to Heading 1
+        lv1 = lt.ListLevels(1)
+        lv1.NumberFormat = "%1."
+        lv1.NumberStyle = 0  # wdListNumberStyleArabic
+        lv1.StartAt = 1
+        lv1.Alignment = 0  # left
+        lv1.NumberPosition = 0
+        lv1.TextPosition = 28  # ~1cm indent for text after number
+        lv1.TabPosition = 28
+        lv1.LinkedStyle = "Heading 1"
+
+        # Level 2: "1.1" linked to Heading 2
+        lv2 = lt.ListLevels(2)
+        lv2.NumberFormat = "%1.%2"
+        lv2.NumberStyle = 0
+        lv2.StartAt = 1
+        lv2.Alignment = 0
+        lv2.NumberPosition = 0
+        lv2.TextPosition = 28
+        lv2.TabPosition = 28
+        lv2.LinkedStyle = "Heading 2"
+
+        # --- Apply styles to paragraphs ---
+        h1_applied = 0
+        h2_applied = 0
+
+        all_heading_paras = []
+        for idx in (h1_paragraphs or []):
+            all_heading_paras.append((idx, -2))  # wdStyleHeading1
+        for idx in (h2_paragraphs or []):
+            all_heading_paras.append((idx, -3))  # wdStyleHeading2
+        all_heading_paras.sort(key=lambda x: x[0])
+
+        for para_idx, style_id in all_heading_paras:
+            if para_idx < 1 or para_idx > doc.Paragraphs.Count:
+                continue
+            para = doc.Paragraphs(para_idx)
+            para.Style = doc.Styles(style_id)
+            if style_id == -2:
+                h1_applied += 1
+            else:
+                h2_applied += 1
+
+        # --- Apply list template to all heading paragraphs ---
+        for para_idx, _ in all_heading_paras:
+            if para_idx < 1 or para_idx > doc.Paragraphs.Count:
+                continue
+            para = doc.Paragraphs(para_idx)
+            para.Range.ListFormat.ApplyListTemplateWithLevel(
+                ListTemplate=lt,
+                ContinuePreviousList=True,
+                DefaultListBehavior=1,
+            )
+
+        # --- Strip manual numbers ---
+        stripped = 0
+        if strip_manual_numbers:
+            for para_idx, _ in all_heading_paras:
+                if para_idx < 1 or para_idx > doc.Paragraphs.Count:
+                    continue
+                para = doc.Paragraphs(para_idx)
+                text = para.Range.Text.rstrip("\r\x07")
+                # Match patterns: "1. ", "1.1 ", "2.3 ", "10. ", "10.2 ", etc.
+                m = re.match(r"^\d+(\.\d+)*\.?\s+", text)
+                if m:
+                    # Delete the matched prefix
+                    prefix_len = len(m.group(0))
+                    rng = doc.Range(para.Range.Start, para.Range.Start + prefix_len)
+                    rng.Delete()
+                    stripped += 1
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "h1_applied": h1_applied,
+            "h2_applied": h2_applied,
+            "stripped": stripped,
+        })
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 async def word_live_add_table(
     filename: str = None,
     rows: int = 2,
