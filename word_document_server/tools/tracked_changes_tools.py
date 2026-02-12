@@ -26,13 +26,15 @@ async def track_replace(
     new_text: str,
     author: str = "Av. Yüce Karapazar",
 ) -> str:
-    """Replace text with tracked changes (marks old as deleted, new as inserted).
+    """Replace text content with tracked changes (marks old as deleted, new as inserted).
+    This changes TEXT CONTENT only — it does not change formatting (font, highlight, style).
+    To change formatting, use word_live_format_text instead.
 
     Args:
-        filename: Path to Word document
-        old_text: Text to find and mark as deleted
-        new_text: Replacement text to insert
-        author: Author name for the tracked change (default: Claude)
+        filename: Path to Word document.
+        old_text: Text to find and mark as deleted.
+        new_text: Replacement text to insert (must differ from old_text).
+        author: Author name for the tracked change.
 
     Returns:
         JSON string with result
@@ -62,13 +64,14 @@ async def track_insert(
     insert_text: str,
     author: str = "Av. Yüce Karapazar",
 ) -> str:
-    """Insert text after a specific string, marked as a tracked insertion.
+    """Insert text content after a specific string, marked as a tracked insertion.
+    This changes TEXT CONTENT only — it does not change formatting.
 
     Args:
-        filename: Path to Word document
-        after_text: Text to search for; new text is inserted right after this
-        insert_text: Text to insert
-        author: Author name for the tracked change (default: Claude)
+        filename: Path to Word document.
+        after_text: Text to search for; new text is inserted right after this.
+        insert_text: Text to insert.
+        author: Author name for the tracked change.
 
     Returns:
         JSON string with result
@@ -99,12 +102,13 @@ async def track_delete(
     text: str,
     author: str = "Av. Yüce Karapazar",
 ) -> str:
-    """Mark text as deleted (tracked deletion).
+    """Mark text content as deleted (tracked deletion).
+    This changes TEXT CONTENT only — it does not change formatting.
 
     Args:
-        filename: Path to Word document
-        text: Text to mark as deleted
-        author: Author name for the tracked change (default: Claude)
+        filename: Path to Word document.
+        text: Text to mark as deleted.
+        author: Author name for the tracked change.
 
     Returns:
         JSON string with result

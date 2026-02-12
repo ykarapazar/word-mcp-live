@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any, Union, Tuple
 from docx import Document
 
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
-from word_document_server.utils.extended_document_utils import get_paragraph_text, find_text
+from word_document_server.utils.extended_document_utils import get_paragraph_text, find_text, get_highlighted_text
 
 
 async def get_paragraph_text_from_document(filename: str, paragraph_index: int) -> str:
@@ -61,6 +61,25 @@ async def find_text_in_document(filename: str, text_to_find: str, match_case: bo
         return json.dumps(result, indent=2)
     except Exception as e:
         return f"Failed to search for text: {str(e)}"
+
+
+async def get_highlighted_text_from_document(filename: str, color: str = None) -> str:
+    """Extract all highlighted text from a Word document, including table cells.
+
+    Args:
+        filename: Path to the Word document
+        color: Optional color filter (e.g. "yellow", "green"). If omitted, returns all.
+    """
+    filename = ensure_docx_extension(filename)
+
+    if not os.path.exists(filename):
+        return f"Document {filename} does not exist"
+
+    try:
+        result = get_highlighted_text(filename, color)
+        return json.dumps(result, indent=2, ensure_ascii=False)
+    except Exception as e:
+        return f"Failed to extract highlighted text: {str(e)}"
 
 
 async def convert_to_pdf(filename: str, output_filename: Optional[str] = None) -> str:

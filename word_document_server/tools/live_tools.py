@@ -101,21 +101,31 @@ async def word_live_format_text(
     style_name: str = None,
     track_changes: bool = False,
 ) -> str:
-    """Format text in an open Word document.
+    """[Windows only] Format text in an open Word document: font, color, highlight, style.
+    Use this tool for any visual/formatting change that does NOT alter the text content itself.
 
     Args:
-        filename: Document name or path.
-        start: Start character position (required).
+        filename: Document name or path (None = active document).
+        start: Start character position (required). Use word_live_find_text to get positions.
         end: End character position (required).
-        bold: Set bold.
-        italic: Set italic.
-        underline: Set underline.
-        font_name: Font family (e.g., "Arial").
-        font_size: Font size in points.
-        font_color: RGB hex (e.g., "#FF0000").
-        highlight_color: Word highlight index (0=none, 1–16).
-        style_name: Apply a named style.
-        track_changes: Track formatting changes.
+        bold: Set bold (True/False).
+        italic: Set italic (True/False).
+        underline: Set underline (True/False).
+        font_name: Font family (e.g., "Arial", "Times New Roman").
+        font_size: Font size in points (e.g., 12).
+        font_color: Text color as "#RRGGBB" hex (e.g., "#FF0000" for red).
+        highlight_color: Text highlight background color index.
+            0 = remove highlight, 1 = black, 2 = blue, 3 = turquoise,
+            4 = bright green, 5 = pink, 6 = red, 7 = yellow,
+            8 = white, 9 = dark blue, 10 = teal, 11 = green,
+            12 = violet, 13 = dark red, 14 = dark yellow, 15 = gray, 16 = light gray.
+            Common: 7=yellow (add), 0=none (remove).
+        style_name: Apply a named Word style (e.g., "Heading 1", "Normal").
+        track_changes: Track formatting changes as revisions.
+
+    Note: To change formatting without changing text (e.g., remove highlight,
+    change font), use this tool. For text content changes, use track_replace
+    or word_live_insert_text instead.
 
     Returns:
         JSON with result info.
@@ -157,7 +167,7 @@ async def word_live_format_text(
                 r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
                 rng.Font.Color = r + (g << 8) + (b << 16)
             if highlight_color is not None:
-                rng.Font.HighlightColorIndex = highlight_color
+                rng.HighlightColorIndex = highlight_color
             if style_name is not None:
                 rng.Style = style_name
         finally:

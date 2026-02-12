@@ -309,11 +309,11 @@ def register_tools():
         annotations=ToolAnnotations(
             title="Format Text",
         ),
+        description=format_tools.format_text.__doc__,
     )
     def format_text(filename: str, paragraph_index: int, start_pos: int, end_pos: int,
                    bold: bool = None, italic: bool = None, underline: bool = None,
                    color: str = None, font_size: int = None, font_name: str = None):
-        """Format a specific range of text within a paragraph."""
         return format_tools.format_text(
             filename, paragraph_index, start_pos, end_pos, bold, italic,
             underline, color, font_size, font_name
@@ -577,6 +577,16 @@ def register_tools():
     
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Get Highlighted Text",
+            readOnlyHint=True,
+        ),
+    )
+    def get_highlighted_text(filename: str, color: str = None):
+        """Extract all highlighted/colored text from a Word document, including text inside tables."""
+        return extended_document_tools.get_highlighted_text_from_document(filename, color)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Convert to PDF",
             destructiveHint=True,
         ),
@@ -747,11 +757,9 @@ def register_tools():
             title="Track Replace",
             destructiveHint=True,
         ),
+        description=tracked_changes_tools.track_replace.__doc__,
     )
     def track_replace(filename: str, old_text: str, new_text: str, author: str = "Av. Yüce Karapazar"):
-        """Replace text with tracked changes. Marks old text as deleted and new text as inserted,
-        so the change is visible in Word's Review panel. Use this instead of search_and_replace
-        when you want the change to be reviewable by the user."""
         return tracked_changes_tools.track_replace(filename, old_text, new_text, author)
 
     @mcp.tool(
@@ -759,10 +767,9 @@ def register_tools():
             title="Track Insert",
             destructiveHint=True,
         ),
+        description=tracked_changes_tools.track_insert.__doc__,
     )
     def track_insert(filename: str, after_text: str, insert_text: str, author: str = "Av. Yüce Karapazar"):
-        """Insert text after a specific string, marked as a tracked insertion visible in
-        Word's Review panel. The inserted text appears with underline/color marking."""
         return tracked_changes_tools.track_insert(filename, after_text, insert_text, author)
 
     @mcp.tool(
@@ -770,10 +777,9 @@ def register_tools():
             title="Track Delete",
             destructiveHint=True,
         ),
+        description=tracked_changes_tools.track_delete.__doc__,
     )
     def track_delete(filename: str, text: str, author: str = "Av. Yüce Karapazar"):
-        """Mark text as deleted (tracked deletion) visible in Word's Review panel.
-        The text appears with strikethrough marking and can be accepted or rejected."""
         return tracked_changes_tools.track_delete(filename, text, author)
 
     @mcp.tool(
@@ -846,6 +852,7 @@ def register_tools():
             title="Word Live Format Text",
             destructiveHint=True,
         ),
+        description=live_tools.word_live_format_text.__doc__,
     )
     def word_live_format_text(
         filename: str = None,
@@ -861,8 +868,6 @@ def register_tools():
         style_name: str = None,
         track_changes: bool = False,
     ):
-        """[Windows only] Format text in a Word document open in Word.
-        Specify start/end character positions and formatting properties. Requires Word running."""
         return live_tools.word_live_format_text(
             filename, start, end, bold, italic, underline,
             font_name, font_size, font_color, highlight_color,

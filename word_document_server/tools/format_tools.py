@@ -26,19 +26,22 @@ async def format_text(filename: str, paragraph_index: int, start_pos: int, end_p
                      bold: Optional[bool] = None, italic: Optional[bool] = None, 
                      underline: Optional[bool] = None, color: Optional[str] = None,
                      font_size: Optional[int] = None, font_name: Optional[str] = None) -> str:
-    """Format a specific range of text within a paragraph.
-    
+    """Format text within a paragraph using python-docx (cross-platform, file-based).
+    Only supports: bold, italic, underline, color, font_size, font_name.
+    Does NOT support: highlight colors, styles, tracked changes.
+    For highlight/style changes, use word_live_format_text instead (Windows only).
+
     Args:
-        filename: Path to the Word document
-        paragraph_index: Index of the paragraph (0-based)
-        start_pos: Start position within the paragraph text
-        end_pos: End position within the paragraph text
-        bold: Set text bold (True/False)
-        italic: Set text italic (True/False)
-        underline: Set text underlined (True/False)
-        color: Text color (e.g., 'red', 'blue', etc.)
-        font_size: Font size in points
-        font_name: Font name/family
+        filename: Path to the Word document (must not be open in Word).
+        paragraph_index: Index of the paragraph (0-based).
+        start_pos: Start position within the paragraph text.
+        end_pos: End position within the paragraph text.
+        bold: Set text bold (True/False).
+        italic: Set text italic (True/False).
+        underline: Set text underlined (True/False).
+        color: Text color — named ("red", "blue") or hex ("FF0000").
+        font_size: Font size in points.
+        font_name: Font name/family (e.g., "Arial").
     """
     filename = ensure_docx_extension(filename)
     

@@ -163,3 +163,66 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
         return results
     except Exception as e:
         return {"error": f"Failed to search for text: {str(e)}"}
+
+
+def get_highlighted_text(doc_path: str, color: str = None) -> Dict[str, Any]:
+    """
+    Extract all highlighted text from a Word document,
+    including text inside table cells.
+
+    Args:
+        doc_path: Path to the Word document
+        color: Optional highlight color filter (e.g. "yellow", "green", "cyan").
+               If None, returns all highlighted text regardless of color.
+
+    Returns:
+        Dictionary with highlighted sections grouped by location
+    """
+    import os
+    from docx.oxml.ns import qn
+
+    if not os.path.exists(doc_path):
+        return {"error": f"Document {doc_path} does not exist"}
+
+    try:
+        doc = Document(doc_path)
+        results = {
+            "filter_color": color,
+            "highlights": [],
+            "total_runs": 0,
+            "summary": {}
+        }
+
+        def _check_paragraphs(paragraphs, location_prefix):
+            for p_idx, para in enumerate(paragraphs):
+                for run in para.runs:
+                    hl = run._element.find(qn('w:rPr'))
+                    if hl is not None:
+                        hl_elem = hl.find(qn('w:highlight'))
+                        if hl_elem is not None:
+                            hl_color = hl_elem.get(qn('w:val'))
+                            if color and hl_color != color:
+                                continue
+                            results["highlights"].append({
+                                "location": f"{location_prefix}, Paragraph {p_idx}",
+                                "color": hl_color,
+                                "text": run.text
+                            })
+                            results["total_runs"] += 1
+                            results["summary"][hl_color] = results["summary"].get(hl_color, 0) + 1
+
+        # Top-level paragraphs
+        _check_paragraphs(doc.paragraphs, "Body")
+
+        # Table cells
+        for t_idx, table in enumerate(doc.tables):
+            for r_idx, row in enumerate(table.rows):
+                for c_idx, cell in enumerate(row.cells):
+                    _check_paragraphs(
+                        cell.paragraphs,
+                        f"Table {t_idx}, Row {r_idx}, Col {c_idx}"
+                    )
+
+        return results
+    except Exception as e:
+        return {"error": f"Failed to extract highlights: {str(e)}"}
