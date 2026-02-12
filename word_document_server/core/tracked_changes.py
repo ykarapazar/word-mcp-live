@@ -8,6 +8,8 @@ support tracked changes natively, so we work directly with the XML.
 Reference: Anthropic docx skill SKILL.md tracked changes patterns.
 """
 
+from word_document_server.defaults import DEFAULT_AUTHOR
+
 import copy
 import json
 import random
@@ -178,7 +180,7 @@ def track_replace_in_doc(
     filepath: str,
     old_text: str,
     new_text: str,
-    author: str = "Av. Yüce Karapazar",
+    author: str = DEFAULT_AUTHOR,
 ) -> dict:
     """Replace text with tracked changes (delete old + insert new).
 
@@ -283,7 +285,7 @@ def track_insert_in_doc(
     filepath: str,
     after_text: str,
     insert_text: str,
-    author: str = "Av. Yüce Karapazar",
+    author: str = DEFAULT_AUTHOR,
 ) -> dict:
     """Insert text after a specific string, marked as a tracked insertion.
 
@@ -361,7 +363,7 @@ def track_insert_in_doc(
 def track_delete_in_doc(
     filepath: str,
     text: str,
-    author: str = "Av. Yüce Karapazar",
+    author: str = DEFAULT_AUTHOR,
 ) -> dict:
     """Mark text as deleted (tracked deletion).
 

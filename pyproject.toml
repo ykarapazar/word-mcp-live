@@ -3,13 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "office-word-mcp-server"
-version = "1.1.11"
-description = "MCP server for manipulating Microsoft Word documents"
+name = "word-mcp-live"
+version = "1.2.0"
+description = "MCP server for Microsoft Word with live COM automation — 99 tools"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
-    {name = "GongRzhe", email = "gongrzhe@gmail.com"}
+    {name = "GongRzhe", email = "gongrzhe@gmail.com"},
+    {name = "Yüce Karapazar"}
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -26,8 +27,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/GongRzhe/Office-Word-MCP-Server.git"
-"Bug Tracker" = "https://github.com/GongRzhe/Office-Word-MCP-Server.git/issues"
+"Homepage" = "https://github.com/ykarapazar/word-mcp-live"
+"Bug Tracker" = "https://github.com/ykarapazar/word-mcp-live/issues"
 
 [tool.hatch.build.targets.wheel]
 only-include = [

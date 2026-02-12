@@ -7,6 +7,7 @@ Supports multiple transports: stdio, sse, and streamable-http using standalone F
 import os
 import sys
 from dotenv import load_dotenv
+from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
 
 # Load environment variables from .env file
 print("Loading configuration from .env file...")
@@ -650,7 +651,7 @@ def register_tools():
         ),
     )
     def add_comment(filename: str, target_text: str, comment_text: str,
-                    author: str = "Av. Yüce Karapazar", initials: str = "AYK"):
+                    author: str = DEFAULT_AUTHOR, initials: str = DEFAULT_INITIALS):
         """Add a comment to a Word document anchored to specific text.
         The comment will appear in Word's Review panel attached to the target text.
 
@@ -658,8 +659,8 @@ def register_tools():
             filename: Path to Word document
             target_text: Text in the document to attach the comment to
             comment_text: The comment content
-            author: Comment author name (default: Av. Yüce Karapazar)
-            initials: Author initials (default: AYK)
+            author: Comment author name (env: MCP_AUTHOR)
+            initials: Author initials (env: MCP_AUTHOR_INITIALS)
         """
         return comment_write_tools.add_comment(filename, target_text, comment_text, author, initials)
 
@@ -759,7 +760,7 @@ def register_tools():
         ),
         description=tracked_changes_tools.track_replace.__doc__,
     )
-    def track_replace(filename: str, old_text: str, new_text: str, author: str = "Av. Yüce Karapazar"):
+    def track_replace(filename: str, old_text: str, new_text: str, author: str = DEFAULT_AUTHOR):
         return tracked_changes_tools.track_replace(filename, old_text, new_text, author)
 
     @mcp.tool(
@@ -769,7 +770,7 @@ def register_tools():
         ),
         description=tracked_changes_tools.track_insert.__doc__,
     )
-    def track_insert(filename: str, after_text: str, insert_text: str, author: str = "Av. Yüce Karapazar"):
+    def track_insert(filename: str, after_text: str, insert_text: str, author: str = DEFAULT_AUTHOR):
         return tracked_changes_tools.track_insert(filename, after_text, insert_text, author)
 
     @mcp.tool(
@@ -779,7 +780,7 @@ def register_tools():
         ),
         description=tracked_changes_tools.track_delete.__doc__,
     )
-    def track_delete(filename: str, text: str, author: str = "Av. Yüce Karapazar"):
+    def track_delete(filename: str, text: str, author: str = DEFAULT_AUTHOR):
         return tracked_changes_tools.track_delete(filename, text, author)
 
     @mcp.tool(
@@ -974,7 +975,7 @@ def register_tools():
         end: int = None,
         paragraph_index: int = None,
         text: str = "",
-        author: str = "Av. Yüce Karapazar",
+        author: str = DEFAULT_AUTHOR,
     ):
         """[Windows only] Add a comment to a Word document open in Word.
         Specify start/end character positions or paragraph_index (1-indexed). Requires Word running."""

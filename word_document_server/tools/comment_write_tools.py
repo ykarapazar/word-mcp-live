@@ -7,6 +7,7 @@ These tools provide MCP interfaces for adding comments to Word documents.
 import json
 import os
 
+from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.core.comment_writer import add_comment_to_doc
 
@@ -15,8 +16,8 @@ async def add_comment(
     filename: str,
     target_text: str,
     comment_text: str,
-    author: str = "Av. Yüce Karapazar",
-    initials: str = "AYK",
+    author: str = DEFAULT_AUTHOR,
+    initials: str = DEFAULT_INITIALS,
 ) -> str:
     """Add a comment to a Word document anchored to specific text.
 

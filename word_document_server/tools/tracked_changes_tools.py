@@ -9,6 +9,8 @@ import json
 import os
 from typing import Optional
 
+from word_document_server.defaults import DEFAULT_AUTHOR
+
 from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
 from word_document_server.core.tracked_changes import (
     track_replace_in_doc,
@@ -24,7 +26,7 @@ async def track_replace(
     filename: str,
     old_text: str,
     new_text: str,
-    author: str = "Av. Yüce Karapazar",
+    author: str = DEFAULT_AUTHOR,
 ) -> str:
     """Replace text content with tracked changes (marks old as deleted, new as inserted).
     This changes TEXT CONTENT only — it does not change formatting (font, highlight, style).
@@ -62,7 +64,7 @@ async def track_insert(
     filename: str,
     after_text: str,
     insert_text: str,
-    author: str = "Av. Yüce Karapazar",
+    author: str = DEFAULT_AUTHOR,
 ) -> str:
     """Insert text content after a specific string, marked as a tracked insertion.
     This changes TEXT CONTENT only — it does not change formatting.
@@ -100,7 +102,7 @@ async def track_insert(
 async def track_delete(
     filename: str,
     text: str,
-    author: str = "Av. Yüce Karapazar",
+    author: str = DEFAULT_AUTHOR,
 ) -> str:
     """Mark text content as deleted (tracked deletion).
     This changes TEXT CONTENT only — it does not change formatting.

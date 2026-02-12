@@ -8,6 +8,8 @@ that python-docx cannot open.
 import json
 import sys
 
+from word_document_server.defaults import DEFAULT_AUTHOR
+
 
 async def word_live_get_text(filename: str = None) -> str:
     """Get all text from an open Word document, paragraph by paragraph.
@@ -223,7 +225,7 @@ async def word_live_add_comment(
     end: int = None,
     paragraph_index: int = None,
     text: str = "",
-    author: str = "Av. Yüce Karapazar",
+    author: str = DEFAULT_AUTHOR,
 ) -> str:
     """Add a comment to an open Word document.
 

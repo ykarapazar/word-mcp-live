@@ -8,6 +8,7 @@ Reference: Anthropic docx skill scripts/comment.py
 """
 
 import copy
+from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
 import random
 import zipfile
 from datetime import datetime, timezone
@@ -176,8 +177,8 @@ def add_comment_to_doc(
     filepath: str,
     target_text: str,
     comment_text: str,
-    author: str = "Av. Yüce Karapazar",
-    initials: str = "AYK",
+    author: str = DEFAULT_AUTHOR,
+    initials: str = DEFAULT_INITIALS,
 ) -> dict:
     """Add a comment to a Word document anchored to specific text.
 

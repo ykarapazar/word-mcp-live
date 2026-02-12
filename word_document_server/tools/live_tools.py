@@ -5,7 +5,10 @@ providing real-time editing capabilities with optional tracked changes.
 """
 
 import json
+import os
 import sys
+
+from word_document_server.defaults import DEFAULT_AUTHOR
 
 # Word COM constants
 WD_STORY = 6
@@ -43,7 +46,7 @@ async def word_live_insert_text(
         prev_author = app.UserName
         if track_changes:
             doc.TrackRevisions = True
-            app.UserName = "Av. Yüce Karapazar"
+            app.UserName = DEFAULT_AUTHOR
 
         try:
             if bookmark:
@@ -149,7 +152,7 @@ async def word_live_format_text(
         prev_author = app.UserName
         if track_changes:
             doc.TrackRevisions = True
-            app.UserName = "Av. Yüce Karapazar"
+            app.UserName = DEFAULT_AUTHOR
 
         try:
             if bold is not None:
@@ -239,7 +242,7 @@ async def word_live_add_table(
         prev_author = app.UserName
         if track_changes:
             doc.TrackRevisions = True
-            app.UserName = "Av. Yüce Karapazar"
+            app.UserName = DEFAULT_AUTHOR
 
         try:
             table = doc.Tables.Add(rng, rows, cols)
@@ -308,7 +311,7 @@ async def word_live_delete_text(
         prev_author = app.UserName
         if track_changes:
             doc.TrackRevisions = True
-            app.UserName = "Av. Yüce Karapazar"
+            app.UserName = DEFAULT_AUTHOR
 
         try:
             rng.Delete()

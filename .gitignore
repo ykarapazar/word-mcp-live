@@ -14,3 +14,6 @@ wheels/
 .venv
 .env.example
 .idea
+
+# Local MCP config (contains user-specific paths)
+mcp-config.json
