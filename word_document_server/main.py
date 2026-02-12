@@ -867,12 +867,13 @@ def register_tools():
         font_color: str = None,
         highlight_color: int = None,
         style_name: str = None,
+        paragraph_alignment: str = None,
         track_changes: bool = False,
     ):
         return live_tools.word_live_format_text(
             filename, start, end, bold, italic, underline,
             font_name, font_size, font_color, highlight_color,
-            style_name, track_changes,
+            style_name, paragraph_alignment, track_changes,
         )
 
     @mcp.tool(
@@ -911,6 +912,27 @@ def register_tools():
         Specify start/end character positions. Requires Word running."""
         return live_tools.word_live_delete_text(
             filename, start, end, track_changes
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Apply List",
+            destructiveHint=True,
+        ),
+        description=live_tools.word_live_apply_list.__doc__,
+    )
+    def word_live_apply_list(
+        filename: str = None,
+        start_paragraph: int = None,
+        end_paragraph: int = None,
+        list_type: str = "bullet",
+        level: int = 0,
+        remove: bool = False,
+        track_changes: bool = False,
+    ):
+        return live_tools.word_live_apply_list(
+            filename, start_paragraph, end_paragraph, list_type,
+            level, remove, track_changes,
         )
 
     # --- Live read tools (Windows only, requires Word running) ---

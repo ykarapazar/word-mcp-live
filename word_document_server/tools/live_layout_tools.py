@@ -328,7 +328,10 @@ async def word_live_set_paragraph_spacing(
         end_paragraph: End of range (1-indexed, inclusive).
         space_before_pt: Space before paragraph in points.
         space_after_pt: Space after paragraph in points.
-        line_spacing: Line spacing value (depends on rule).
+        line_spacing: Line spacing value IN POINTS (depends on rule).
+            IMPORTANT: For "multiple" rule, value is in points, NOT a multiplier.
+            Single spacing (1.0) = 12pt. So: 1.15 lines = 13.8pt, 1.5 lines = 18pt,
+            2.0 lines = 24pt. Formula: desired_lines * 12 = points_value.
         line_spacing_rule: "single"(0), "1.5_lines"(1), "double"(2),
                            "at_least"(3), "exactly"(4), "multiple"(5).
 

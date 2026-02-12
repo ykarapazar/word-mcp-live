@@ -102,9 +102,10 @@ async def word_live_format_text(
     font_color: str = None,
     highlight_color: int = None,
     style_name: str = None,
+    paragraph_alignment: str = None,
     track_changes: bool = False,
 ) -> str:
-    """[Windows only] Format text in an open Word document: font, color, highlight, style.
+    """[Windows only] Format text in an open Word document: font, color, highlight, style, alignment.
     Use this tool for any visual/formatting change that does NOT alter the text content itself.
 
     Args:
@@ -124,6 +125,8 @@ async def word_live_format_text(
             12 = violet, 13 = dark red, 14 = dark yellow, 15 = gray, 16 = light gray.
             Common: 7=yellow (add), 0=none (remove).
         style_name: Apply a named Word style (e.g., "Heading 1", "Normal").
+        paragraph_alignment: Paragraph alignment — "left" (0), "center" (1), "right" (2), "justify" (3).
+            Applies to ALL paragraphs in the selected range.
         track_changes: Track formatting changes as revisions.
 
     Note: To change formatting without changing text (e.g., remove highlight,
@@ -173,6 +176,13 @@ async def word_live_format_text(
                 rng.HighlightColorIndex = highlight_color
             if style_name is not None:
                 rng.Style = style_name
+            if paragraph_alignment is not None:
+                align_map = {"left": 0, "center": 1, "right": 2, "justify": 3}
+                al = align_map.get(paragraph_alignment.lower())
+                if al is None:
+                    return json.dumps({"error": f"Invalid alignment: {paragraph_alignment}. Use: left, center, right, justify"})
+                for para in rng.Paragraphs:
+                    para.Format.Alignment = al
         finally:
             if track_changes:
                 doc.TrackRevisions = prev_tracking
@@ -191,6 +201,97 @@ async def word_live_format_text(
                 "tracked": track_changes,
             }
         )
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_apply_list(
+    filename: str = None,
+    start_paragraph: int = None,
+    end_paragraph: int = None,
+    list_type: str = "bullet",
+    level: int = 0,
+    remove: bool = False,
+    track_changes: bool = False,
+) -> str:
+    """[Windows only] Apply or remove bullet/numbered list formatting on paragraphs in an open Word document.
+
+    Args:
+        filename: Document name or path (None = active document).
+        start_paragraph: First paragraph to format (1-indexed, required).
+        end_paragraph: Last paragraph to format (1-indexed, defaults to start_paragraph).
+        list_type: "bullet" for bullet list, "number" for numbered list.
+        level: Indentation level (0 = first level, 1 = second level, etc.).
+        remove: If True, removes list formatting from the range.
+        track_changes: Track changes as revisions.
+
+    Returns:
+        JSON with result info.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    if start_paragraph is None:
+        return json.dumps({"error": "start_paragraph is required (1-indexed)"})
+
+    if end_paragraph is None:
+        end_paragraph = start_paragraph
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        total_paras = doc.Paragraphs.Count
+        if start_paragraph < 1 or end_paragraph > total_paras:
+            return json.dumps({
+                "error": f"Paragraph range {start_paragraph}-{end_paragraph} out of bounds (doc has {total_paras} paragraphs)"
+            })
+
+        prev_tracking = doc.TrackRevisions
+        prev_author = app.UserName
+        if track_changes:
+            doc.TrackRevisions = True
+            app.UserName = DEFAULT_AUTHOR
+
+        try:
+            # Word COM ListGallery constants:
+            # wdBulletGallery = 1, wdNumberGallery = 2, wdOutlineNumberGallery = 3
+            gallery_map = {"bullet": 1, "number": 2}
+            formatted = 0
+
+            for i in range(start_paragraph, end_paragraph + 1):
+                para = doc.Paragraphs(i)
+                if remove:
+                    para.Range.ListFormat.RemoveNumbers()
+                else:
+                    gallery_idx = gallery_map.get(list_type, 1)
+                    template = doc.Application.ListGalleries(gallery_idx).ListTemplates(1)
+                    para.Range.ListFormat.ApplyListTemplateWithLevel(
+                        ListTemplate=template,
+                        ContinuePreviousList=True if i > start_paragraph else False,
+                        DefaultListBehavior=1,  # wdWord2003
+                    )
+                    if level > 0:
+                        para.Range.ListFormat.ListLevelNumber = level + 1
+                formatted += 1
+        finally:
+            if track_changes:
+                doc.TrackRevisions = prev_tracking
+                app.UserName = prev_author
+
+        action = "removed" if remove else f"applied {list_type}"
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "action": action,
+            "paragraphs": f"{start_paragraph}-{end_paragraph}",
+            "count": formatted,
+            "level": level,
+            "tracked": track_changes,
+        })
 
     except Exception as e:
         return json.dumps({"error": str(e)})
