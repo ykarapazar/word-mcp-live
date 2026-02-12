@@ -213,6 +213,7 @@ async def word_live_apply_list(
     list_type: str = "bullet",
     level: int = 0,
     remove: bool = False,
+    continue_previous: bool = False,
     track_changes: bool = False,
 ) -> str:
     """[Windows only] Apply or remove bullet/numbered list formatting on paragraphs in an open Word document.
@@ -224,6 +225,9 @@ async def word_live_apply_list(
         list_type: "bullet" for bullet list, "number" for numbered list.
         level: Indentation level (0 = first level, 1 = second level, etc.).
         remove: If True, removes list formatting from the range.
+        continue_previous: If True, continues numbering from a previous list above
+            (useful when bullets interrupt a numbered list, e.g. items 1-4, then bullets,
+            then item 5 should continue as 5 not restart at 1).
         track_changes: Track changes as revisions.
 
     Returns:
@@ -269,9 +273,10 @@ async def word_live_apply_list(
                 else:
                     gallery_idx = gallery_map.get(list_type, 1)
                     template = doc.Application.ListGalleries(gallery_idx).ListTemplates(1)
+                    should_continue = (i > start_paragraph) or continue_previous
                     para.Range.ListFormat.ApplyListTemplateWithLevel(
                         ListTemplate=template,
-                        ContinuePreviousList=True if i > start_paragraph else False,
+                        ContinuePreviousList=should_continue,
                         DefaultListBehavior=1,  # wdWord2003
                     )
                     if level > 0:

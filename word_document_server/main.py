@@ -928,11 +928,12 @@ def register_tools():
         list_type: str = "bullet",
         level: int = 0,
         remove: bool = False,
+        continue_previous: bool = False,
         track_changes: bool = False,
     ):
         return live_tools.word_live_apply_list(
             filename, start_paragraph, end_paragraph, list_type,
-            level, remove, track_changes,
+            level, remove, continue_previous, track_changes,
         )
 
     # --- Live read tools (Windows only, requires Word running) ---
