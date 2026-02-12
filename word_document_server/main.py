@@ -25,7 +25,12 @@ from word_document_server.tools import (
     comment_tools,
     comment_write_tools,
     hyperlink_tools,
-    tracked_changes_tools
+    tracked_changes_tools,
+    live_tools,
+    live_read_tools,
+    live_layout_tools,
+    screen_capture_tools,
+    layout_tools,
 )
 from word_document_server.tools.content_tools import replace_paragraph_block_below_header_tool
 from word_document_server.tools.content_tools import replace_block_between_manual_anchors_tool
@@ -804,6 +809,541 @@ def register_tools():
         Optionally filter by author or specific change IDs."""
         return tracked_changes_tools.reject_tracked_changes(filename, author, change_ids)
 
+    # --- Live editing tools (Windows only, requires Word running) ---
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Screen Capture",
+            readOnlyHint=True,
+        ),
+    )
+    def word_screen_capture(filename: str = None, output_path: str = None):
+        """[Windows only] Capture a screenshot of a Word document window.
+        Returns the path to the saved PNG image. Requires Word to be running."""
+        return screen_capture_tools.word_screen_capture(filename, output_path)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Insert Text",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_insert_text(
+        filename: str = None,
+        text: str = "",
+        position: str = "end",
+        bookmark: str = None,
+        track_changes: bool = False,
+    ):
+        """[Windows only] Insert text into a Word document that is open in Word.
+        Position: 'start', 'end', 'cursor', or character offset. Requires Word running."""
+        return live_tools.word_live_insert_text(
+            filename, text, position, bookmark, track_changes
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Format Text",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_format_text(
+        filename: str = None,
+        start: int = None,
+        end: int = None,
+        bold: bool = None,
+        italic: bool = None,
+        underline: bool = None,
+        font_name: str = None,
+        font_size: float = None,
+        font_color: str = None,
+        highlight_color: int = None,
+        style_name: str = None,
+        track_changes: bool = False,
+    ):
+        """[Windows only] Format text in a Word document open in Word.
+        Specify start/end character positions and formatting properties. Requires Word running."""
+        return live_tools.word_live_format_text(
+            filename, start, end, bold, italic, underline,
+            font_name, font_size, font_color, highlight_color,
+            style_name, track_changes,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Add Table",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_add_table(
+        filename: str = None,
+        rows: int = 2,
+        cols: int = 2,
+        position: str = "end",
+        data: list = None,
+        track_changes: bool = False,
+    ):
+        """[Windows only] Add a table to a Word document open in Word.
+        Optionally provide data as 2D list. Requires Word running."""
+        return live_tools.word_live_add_table(
+            filename, rows, cols, position, data, track_changes
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Delete Text",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_delete_text(
+        filename: str = None,
+        start: int = None,
+        end: int = None,
+        track_changes: bool = False,
+    ):
+        """[Windows only] Delete text from a Word document open in Word.
+        Specify start/end character positions. Requires Word running."""
+        return live_tools.word_live_delete_text(
+            filename, start, end, track_changes
+        )
+
+    # --- Live read tools (Windows only, requires Word running) ---
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Get Text",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_get_text(filename: str = None):
+        """[Windows only] Get all text from a Word document open in Word, paragraph by paragraph. Requires Word running."""
+        return live_read_tools.word_live_get_text(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Get Info",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_get_info(filename: str = None):
+        """[Windows only] Get document info (pages, words, sections, etc.) from a Word document open in Word. Requires Word running."""
+        return live_read_tools.word_live_get_info(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Find Text",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_find_text(
+        filename: str = None,
+        search_text: str = "",
+        match_case: bool = False,
+        whole_word: bool = False,
+        max_results: int = 50,
+    ):
+        """[Windows only] Find text in a Word document open in Word. Returns positions and context. Requires Word running."""
+        return live_read_tools.word_live_find_text(
+            filename, search_text, match_case, whole_word, max_results
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Get Comments",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_get_comments(filename: str = None):
+        """[Windows only] Get all comments from a Word document open in Word. Requires Word running."""
+        return live_read_tools.word_live_get_comments(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Add Comment",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_add_comment(
+        filename: str = None,
+        start: int = None,
+        end: int = None,
+        paragraph_index: int = None,
+        text: str = "",
+        author: str = "Av. Yüce Karapazar",
+    ):
+        """[Windows only] Add a comment to a Word document open in Word.
+        Specify start/end character positions or paragraph_index (1-indexed). Requires Word running."""
+        return live_read_tools.word_live_add_comment(
+            filename, start, end, paragraph_index, text, author
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live List Revisions",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_list_revisions(filename: str = None):
+        """[Windows only] List all tracked changes (revisions) in a Word document open in Word. Requires Word running."""
+        return live_read_tools.word_live_list_revisions(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Accept Revisions",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_accept_revisions(
+        filename: str = None,
+        author: str = None,
+        revision_ids: list[int] = None,
+    ):
+        """[Windows only] Accept tracked changes in a Word document open in Word.
+        Filter by author or specific revision IDs. Requires Word running."""
+        return live_read_tools.word_live_accept_revisions(
+            filename, author, revision_ids
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Reject Revisions",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_reject_revisions(
+        filename: str = None,
+        author: str = None,
+        revision_ids: list[int] = None,
+    ):
+        """[Windows only] Reject tracked changes in a Word document open in Word.
+        Filter by author or specific revision IDs. Requires Word running."""
+        return live_read_tools.word_live_reject_revisions(
+            filename, author, revision_ids
+        )
+
+    # --- Live layout tools (Windows only, requires Word running) ---
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Set Page Layout",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_set_page_layout(
+        filename: str = None,
+        section_index: int = 1,
+        orientation: str = None,
+        page_width_inches: float = None,
+        page_height_inches: float = None,
+        margin_top_inches: float = None,
+        margin_bottom_inches: float = None,
+        margin_left_inches: float = None,
+        margin_right_inches: float = None,
+    ):
+        """[Windows only] Set page layout (orientation, size, margins) for a section in a Word document open in Word. Requires Word running."""
+        return live_layout_tools.word_live_set_page_layout(
+            filename, section_index, orientation,
+            page_width_inches, page_height_inches,
+            margin_top_inches, margin_bottom_inches,
+            margin_left_inches, margin_right_inches,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Add Header/Footer",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_add_header_footer(
+        filename: str = None,
+        section_index: int = 1,
+        header_text: str = None,
+        footer_text: str = None,
+        header_alignment: str = "center",
+        footer_alignment: str = "center",
+    ):
+        """[Windows only] Add header and/or footer to a section in a Word document open in Word. Requires Word running."""
+        return live_layout_tools.word_live_add_header_footer(
+            filename, section_index, header_text, footer_text,
+            header_alignment, footer_alignment,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Add Page Numbers",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_add_page_numbers(
+        filename: str = None,
+        section_index: int = 1,
+        position: str = "footer",
+        alignment: str = "center",
+        prefix: str = "",
+        suffix: str = "",
+        include_total: bool = False,
+    ):
+        """[Windows only] Add page numbers to header or footer in a Word document open in Word. Requires Word running."""
+        return live_layout_tools.word_live_add_page_numbers(
+            filename, section_index, position, alignment,
+            prefix, suffix, include_total,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Add Section Break",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_add_section_break(
+        filename: str = None,
+        break_type: str = "new_page",
+    ):
+        """[Windows only] Add a section break (new_page, continuous, even_page, odd_page) to a Word document open in Word. Requires Word running."""
+        return live_layout_tools.word_live_add_section_break(
+            filename, break_type,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Set Paragraph Spacing",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_set_paragraph_spacing(
+        filename: str = None,
+        paragraph_index: int = None,
+        start_paragraph: int = None,
+        end_paragraph: int = None,
+        space_before_pt: float = None,
+        space_after_pt: float = None,
+        line_spacing: float = None,
+        line_spacing_rule: str = None,
+    ):
+        """[Windows only] Set paragraph spacing (before/after/line) in a Word document open in Word. Paragraphs are 1-indexed. Requires Word running."""
+        return live_layout_tools.word_live_set_paragraph_spacing(
+            filename, paragraph_index, start_paragraph, end_paragraph,
+            space_before_pt, space_after_pt, line_spacing, line_spacing_rule,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Add Bookmark",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_add_bookmark(
+        filename: str = None,
+        paragraph_index: int = 1,
+        bookmark_name: str = "",
+    ):
+        """[Windows only] Add a named bookmark at a paragraph in a Word document open in Word.
+        Paragraph is 1-indexed. Requires Word running."""
+        return live_layout_tools.word_live_add_bookmark(
+            filename, paragraph_index, bookmark_name,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Add Watermark",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_add_watermark(
+        filename: str = None,
+        text: str = "TASLAK",
+        font_size: int = 72,
+        font_color: str = "C0C0C0",
+        rotation: int = -45,
+        section_index: int = 1,
+    ):
+        """[Windows only] Add a diagonal text watermark to a Word document open in Word. Requires Word running."""
+        return live_layout_tools.word_live_add_watermark(
+            filename, text, font_size, font_color, rotation, section_index,
+        )
+
+    # --- Layout, header/footer, spacing, bookmark, watermark tools ---
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Page Layout",
+            destructiveHint=True,
+        ),
+    )
+    def set_page_layout(
+        filename: str,
+        section_index: int = 0,
+        orientation: str = None,
+        page_width_inches: float = None,
+        page_height_inches: float = None,
+        margin_top_inches: float = None,
+        margin_bottom_inches: float = None,
+        margin_left_inches: float = None,
+        margin_right_inches: float = None,
+    ):
+        """Set page layout (orientation, size, margins) for a document section."""
+        return layout_tools.set_page_layout(
+            filename, section_index, orientation,
+            page_width_inches, page_height_inches,
+            margin_top_inches, margin_bottom_inches,
+            margin_left_inches, margin_right_inches,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Header/Footer",
+            destructiveHint=True,
+        ),
+    )
+    def add_header_footer(
+        filename: str,
+        section_index: int = 0,
+        header_text: str = None,
+        footer_text: str = None,
+        header_alignment: str = "center",
+        footer_alignment: str = "center",
+    ):
+        """Add header and/or footer text to a document section."""
+        return layout_tools.add_header_footer(
+            filename, section_index, header_text, footer_text,
+            header_alignment, footer_alignment,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Page Numbers",
+            destructiveHint=True,
+        ),
+    )
+    def add_page_numbers(
+        filename: str,
+        section_index: int = 0,
+        position: str = "footer",
+        alignment: str = "center",
+        prefix: str = "",
+        suffix: str = "",
+        include_total: bool = False,
+    ):
+        """Add page numbers to header or footer using PAGE/NUMPAGES fields."""
+        return layout_tools.add_page_numbers(
+            filename, section_index, position, alignment,
+            prefix, suffix, include_total,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Section Break",
+            destructiveHint=True,
+        ),
+    )
+    def add_section_break(filename: str, break_type: str = "new_page"):
+        """Add a section break (new_page, continuous, even_page, odd_page)."""
+        return layout_tools.add_section_break(filename, break_type)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Set Paragraph Spacing",
+            destructiveHint=True,
+        ),
+    )
+    def set_paragraph_spacing(
+        filename: str,
+        paragraph_index: int = None,
+        start_paragraph: int = None,
+        end_paragraph: int = None,
+        space_before_pt: float = None,
+        space_after_pt: float = None,
+        line_spacing: float = None,
+        line_spacing_rule: str = None,
+    ):
+        """Set paragraph spacing (before/after/line) for one or a range of paragraphs.
+        line_spacing_rule: single, 1.5_lines, double, exactly, at_least, multiple."""
+        return layout_tools.set_paragraph_spacing(
+            filename, paragraph_index, start_paragraph, end_paragraph,
+            space_before_pt, space_after_pt, line_spacing, line_spacing_rule,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Bookmark",
+            destructiveHint=True,
+        ),
+    )
+    def add_bookmark(filename: str, paragraph_index: int, bookmark_name: str):
+        """Add a named bookmark at a paragraph for cross-referencing."""
+        return layout_tools.add_bookmark(filename, paragraph_index, bookmark_name)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Watermark",
+            destructiveHint=True,
+        ),
+    )
+    def add_watermark(
+        filename: str,
+        text: str = "TASLAK",
+        font_size: int = 72,
+        font_color: str = "C0C0C0",
+        rotation: int = -45,
+        section_index: int = 0,
+    ):
+        """Add a diagonal text watermark (e.g. TASLAK, GİZLİ, DRAFT) to a document."""
+        return layout_tools.add_watermark(
+            filename, text, font_size, font_color, rotation, section_index,
+        )
+
+    # --- Previously unregistered existing tools ---
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Table of Contents",
+            destructiveHint=True,
+        ),
+    )
+    def add_table_of_contents(filename: str, title: str = "Table of Contents", max_level: int = 3):
+        """Add a table of contents based on heading styles."""
+        return content_tools.add_table_of_contents(filename, title, max_level)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Merge Documents",
+            destructiveHint=True,
+        ),
+    )
+    def merge_documents(target_filename: str, source_filenames: list[str], add_page_breaks: bool = True):
+        """Merge multiple Word documents into a single target document."""
+        return document_tools.merge_documents(target_filename, source_filenames, add_page_breaks)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Restricted Editing",
+            destructiveHint=True,
+        ),
+    )
+    def add_restricted_editing(filename: str, password: str, editable_sections: list[str]):
+        """Add restricted editing to a document, allowing editing only in specified sections."""
+        return protection_tools.add_restricted_editing(filename, password, editable_sections)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Digital Signature",
+            destructiveHint=True,
+        ),
+    )
+    def add_digital_signature(filename: str, signer_name: str, reason: str = None):
+        """Add a digital signature to a Word document."""
+        return protection_tools.add_digital_signature(filename, signer_name, reason)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Verify Document",
+            readOnlyHint=True,
+        ),
+    )
+    def verify_document(filename: str, password: str = None):
+        """Verify document protection and/or digital signature."""
+        return protection_tools.verify_document(filename, password)
+
 
 def run_server():
     """Run the Word Document MCP Server with configurable transport."""
@@ -816,6 +1356,10 @@ def run_server():
     # Monkey-patch Document.save() to preserve comments.xml and other custom parts
     from word_document_server.utils.save_utils import install_save_hook
     install_save_hook()
+
+    # Monkey-patch PhysPkgReader to detect Word-locked files
+    from word_document_server.utils.path_utils import install_path_hook
+    install_path_hook()
 
     # Register all tools
     register_tools()

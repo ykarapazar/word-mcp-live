@@ -1,0 +1,325 @@
+"""Live editing tools for Microsoft Word via COM automation.
+
+These tools operate on documents that are currently open in Word,
+providing real-time editing capabilities with optional tracked changes.
+"""
+
+import json
+import sys
+
+# Word COM constants
+WD_STORY = 6
+
+
+async def word_live_insert_text(
+    filename: str = None,
+    text: str = "",
+    position: str = "end",
+    bookmark: str = None,
+    track_changes: bool = False,
+) -> str:
+    """Insert text into an open Word document.
+
+    Args:
+        filename: Document name or path (None = active document).
+        text: Text to insert.
+        position: "start", "end", "cursor", or character offset as string.
+        bookmark: Insert after a named bookmark (overrides position).
+        track_changes: Track the insertion as a revision.
+
+    Returns:
+        JSON with result info.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        prev_tracking = doc.TrackRevisions
+        prev_author = app.UserName
+        if track_changes:
+            doc.TrackRevisions = True
+            app.UserName = "Av. Yüce Karapazar"
+
+        try:
+            if bookmark:
+                if not doc.Bookmarks.Exists(bookmark):
+                    return json.dumps({"error": f"Bookmark '{bookmark}' not found"})
+                doc.Bookmarks(bookmark).Range.InsertAfter(text)
+            elif position == "start":
+                doc.Range(0, 0).InsertBefore(text)
+            elif position == "end":
+                end_pos = doc.Content.End - 1
+                doc.Range(end_pos, end_pos).InsertAfter(text)
+            elif position == "cursor":
+                app.Selection.TypeText(text)
+            else:
+                try:
+                    offset = int(position)
+                    doc.Range(offset, offset).InsertBefore(text)
+                except ValueError:
+                    return json.dumps(
+                        {
+                            "error": f"Invalid position: {position}. "
+                            "Use 'start', 'end', 'cursor', or a character offset."
+                        }
+                    )
+        finally:
+            if track_changes:
+                doc.TrackRevisions = prev_tracking
+                app.UserName = prev_author
+
+        return json.dumps(
+            {
+                "success": True,
+                "document": doc.Name,
+                "text_length": len(text),
+                "position": position,
+                "tracked": track_changes,
+            }
+        )
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_format_text(
+    filename: str = None,
+    start: int = None,
+    end: int = None,
+    bold: bool = None,
+    italic: bool = None,
+    underline: bool = None,
+    font_name: str = None,
+    font_size: float = None,
+    font_color: str = None,
+    highlight_color: int = None,
+    style_name: str = None,
+    track_changes: bool = False,
+) -> str:
+    """Format text in an open Word document.
+
+    Args:
+        filename: Document name or path.
+        start: Start character position (required).
+        end: End character position (required).
+        bold: Set bold.
+        italic: Set italic.
+        underline: Set underline.
+        font_name: Font family (e.g., "Arial").
+        font_size: Font size in points.
+        font_color: RGB hex (e.g., "#FF0000").
+        highlight_color: Word highlight index (0=none, 1–16).
+        style_name: Apply a named style.
+        track_changes: Track formatting changes.
+
+    Returns:
+        JSON with result info.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    if start is None or end is None:
+        return json.dumps(
+            {"error": "Both 'start' and 'end' character positions are required"}
+        )
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+        rng = doc.Range(start, end)
+
+        prev_tracking = doc.TrackRevisions
+        prev_author = app.UserName
+        if track_changes:
+            doc.TrackRevisions = True
+            app.UserName = "Av. Yüce Karapazar"
+
+        try:
+            if bold is not None:
+                rng.Font.Bold = bold
+            if italic is not None:
+                rng.Font.Italic = italic
+            if underline is not None:
+                rng.Font.Underline = 1 if underline else 0
+            if font_name is not None:
+                rng.Font.Name = font_name
+            if font_size is not None:
+                rng.Font.Size = font_size
+            if font_color is not None:
+                c = font_color.lstrip("#")
+                r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+                rng.Font.Color = r + (g << 8) + (b << 16)
+            if highlight_color is not None:
+                rng.Font.HighlightColorIndex = highlight_color
+            if style_name is not None:
+                rng.Style = style_name
+        finally:
+            if track_changes:
+                doc.TrackRevisions = prev_tracking
+                app.UserName = prev_author
+
+        preview = rng.Text
+        if len(preview) > 50:
+            preview = preview[:50] + "..."
+
+        return json.dumps(
+            {
+                "success": True,
+                "document": doc.Name,
+                "range": f"{start}-{end}",
+                "text_preview": preview,
+                "tracked": track_changes,
+            }
+        )
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_add_table(
+    filename: str = None,
+    rows: int = 2,
+    cols: int = 2,
+    position: str = "end",
+    data: list = None,
+    track_changes: bool = False,
+) -> str:
+    """Add a table to an open Word document.
+
+    Args:
+        filename: Document name or path.
+        rows: Number of rows.
+        cols: Number of columns.
+        position: "start", "end", or character offset.
+        data: Optional 2D list of cell data.
+        track_changes: Track as revision.
+
+    Returns:
+        JSON with result info.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        if position == "start":
+            rng = doc.Range(0, 0)
+        elif position == "end":
+            end_pos = doc.Content.End - 1
+            rng = doc.Range(end_pos, end_pos)
+        else:
+            try:
+                offset = int(position)
+                rng = doc.Range(offset, offset)
+            except ValueError:
+                return json.dumps({"error": f"Invalid position: {position}"})
+
+        prev_tracking = doc.TrackRevisions
+        prev_author = app.UserName
+        if track_changes:
+            doc.TrackRevisions = True
+            app.UserName = "Av. Yüce Karapazar"
+
+        try:
+            table = doc.Tables.Add(rng, rows, cols)
+            if data:
+                for r_idx, row_data in enumerate(data):
+                    if r_idx >= rows:
+                        break
+                    for c_idx, cell_val in enumerate(row_data):
+                        if c_idx >= cols:
+                            break
+                        table.Cell(r_idx + 1, c_idx + 1).Range.Text = str(cell_val)
+        finally:
+            if track_changes:
+                doc.TrackRevisions = prev_tracking
+                app.UserName = prev_author
+
+        return json.dumps(
+            {
+                "success": True,
+                "document": doc.Name,
+                "rows": rows,
+                "cols": cols,
+                "position": position,
+                "tracked": track_changes,
+            }
+        )
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_delete_text(
+    filename: str = None,
+    start: int = None,
+    end: int = None,
+    track_changes: bool = False,
+) -> str:
+    """Delete text from an open Word document.
+
+    Args:
+        filename: Document name or path.
+        start: Start character position.
+        end: End character position.
+        track_changes: Track deletion as a revision.
+
+    Returns:
+        JSON with deleted text info.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    if start is None or end is None:
+        return json.dumps(
+            {"error": "Both 'start' and 'end' character positions are required"}
+        )
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+        rng = doc.Range(start, end)
+        deleted_text = rng.Text
+
+        prev_tracking = doc.TrackRevisions
+        prev_author = app.UserName
+        if track_changes:
+            doc.TrackRevisions = True
+            app.UserName = "Av. Yüce Karapazar"
+
+        try:
+            rng.Delete()
+        finally:
+            if track_changes:
+                doc.TrackRevisions = prev_tracking
+                app.UserName = prev_author
+
+        preview = deleted_text
+        if len(preview) > 100:
+            preview = preview[:100] + "..."
+
+        return json.dumps(
+            {
+                "success": True,
+                "document": doc.Name,
+                "deleted_text": preview,
+                "range": f"{start}-{end}",
+                "tracked": track_changes,
+            }
+        )
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
