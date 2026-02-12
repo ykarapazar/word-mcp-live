@@ -4,9 +4,9 @@ MCP server for Microsoft Word with live COM automation on Windows.
 
 ![Platform: Windows + macOS/Linux](https://img.shields.io/badge/platform-Windows%20%2B%20macOS%2FLinux-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![Tools: 99](https://img.shields.io/badge/tools-99-orange)
+![Tools: 102](https://img.shields.io/badge/tools-102-orange)
 
-78 cross-platform tools (python-docx) work everywhere. 21 Windows-only live tools use COM automation to edit documents **while they're open in Word** — no file locking issues, real-time tracked changes, comments, and layout control.
+78 cross-platform tools (python-docx) work everywhere. 24 Windows-only live tools use COM automation to edit documents **while they're open in Word** — no file locking issues, real-time tracked changes, comments, and layout control.
 
 ## What's New vs the Original
 
@@ -200,7 +200,7 @@ These work on Windows, macOS, and Linux using python-docx.
 
 </details>
 
-### Windows Live Tools (21)
+### Windows Live Tools (24)
 
 These require Windows with Microsoft Word installed. They operate on documents **currently open in Word** via COM automation — no file locking issues.
 
@@ -211,10 +211,13 @@ These require Windows with Microsoft Word installed. They operate on documents *
 | **Editing** | |
 | `word_live_insert_text` | Insert text (with optional tracked changes) |
 | `word_live_delete_text` | Delete text |
-| `word_live_format_text` | Format text (bold, italic, font, highlight, etc.) |
+| `word_live_format_text` | Format text (bold, italic, font, highlight, paragraph alignment) |
 | `word_live_add_table` | Add a table |
+| `word_live_apply_list` | Apply or remove bullet/numbered list formatting |
+| `word_live_setup_heading_numbering` | Apply multilevel list numbering to headings |
 | **Reading** | |
 | `word_live_get_text` | Get all text paragraph by paragraph |
+| `word_live_get_paragraph_format` | Inspect paragraph formatting (font, spacing, list info) |
 | `word_live_get_info` | Get document metadata (pages, words, sections) |
 | `word_live_find_text` | Find text with context |
 | **Comments & Revisions** | |
