@@ -36,7 +36,7 @@ Set the following environment variables in your Render service:
 After setting the environment variables:
 1. Render will automatically redeploy your service
 2. The server will start with SSE transport on the port provided by Render
-3. Access your server at: `https://office-word-mcp-server-bzlp.onrender.com/sse`
+3. Access your server at: `https://your-app.onrender.com/sse`
 
 ## Health Check Endpoint
 

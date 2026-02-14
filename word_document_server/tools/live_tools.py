@@ -310,23 +310,45 @@ async def word_live_setup_heading_numbering(
     h1_paragraphs: list = None,
     h2_paragraphs: list = None,
     strip_manual_numbers: bool = True,
+    font_name: str = None,
+    h1_size: float = None,
+    h2_size: float = None,
+    bold: bool = None,
+    alignment: str = None,
+    font_color: str = None,
+    h1_space_before: float = None,
+    h1_space_after: float = None,
+    h2_space_before: float = None,
+    h2_space_after: float = None,
+    line_spacing: float = None,
 ) -> str:
     """[Windows only] Set up auto-numbered headings with multilevel list (1. / 1.1).
-
-    Customizes Heading 1 and Heading 2 styles to Karapazar house style before applying:
-    - Heading 1: Cambria 13pt Bold, #0D0D0D, justify, 18pt before, 6pt after, 1.15 line spacing
-    - Heading 2: Cambria 11pt Bold, #0D0D0D, justify, 12pt before, 6pt after, 1.15 line spacing
 
     Creates a multilevel list template: Level 1 = "1." linked to Heading 1,
     Level 2 = "1.1" linked to Heading 2. Applies styles and numbering to the
     specified paragraphs, then optionally strips manual number prefixes
     (regex: ^\d+(\.\d+)*\.?\s+ — matches "1. ", "2.3 ", "10. ", etc.).
 
+    If any style parameter is provided, Heading 1 and Heading 2 styles are
+    customized before applying. If no style params are given, only numbering
+    is applied (existing styles are preserved).
+
     Args:
         filename: Document name or path (None = active document).
         h1_paragraphs: List of 1-indexed paragraph numbers for Heading 1 (main sections).
         h2_paragraphs: List of 1-indexed paragraph numbers for Heading 2 (sub-sections).
         strip_manual_numbers: Remove leading "N." or "N.N" text from headings (default True).
+        font_name: Font family for both heading styles (e.g., "Cambria").
+        h1_size: Font size in points for Heading 1 (e.g., 13).
+        h2_size: Font size in points for Heading 2 (e.g., 11).
+        bold: Set bold on both heading styles (True/False).
+        alignment: Paragraph alignment — "left", "center", "right", "justify".
+        font_color: Text color as "#RRGGBB" hex (e.g., "#0D0D0D").
+        h1_space_before: Space before Heading 1 in points (e.g., 18).
+        h1_space_after: Space after Heading 1 in points (e.g., 6).
+        h2_space_before: Space before Heading 2 in points (e.g., 12).
+        h2_space_after: Space after Heading 2 in points (e.g., 6).
+        line_spacing: Line spacing in points for both heading styles (e.g., 13.8 for 1.15x).
 
     Returns:
         JSON with h1_applied, h2_applied, and stripped counts.
@@ -346,37 +368,48 @@ async def word_live_setup_heading_numbering(
         doc = find_document(app, filename)
 
         with undo_record(app, "MCP: Setup Heading Numbering"):
-            color_int = 0x0D + (0x0D << 8) + (0x0D << 16)  # #0D0D0D in Word RGB
+            # --- Optionally customize heading styles ---
+            has_style_params = any(p is not None for p in [
+                font_name, h1_size, h2_size, bold, alignment, font_color,
+                h1_space_before, h1_space_after, h2_space_before, h2_space_after,
+                line_spacing,
+            ])
 
-            # --- Customize Heading 1 style ---
-            s1 = doc.Styles(-2)  # wdStyleHeading1
-            s1.Font.Name = "Cambria"
-            s1.Font.Size = 13
-            s1.Font.Bold = True
-            s1.Font.Italic = False
-            s1.Font.Color = color_int
-            s1.ParagraphFormat.Alignment = 3  # justify
-            s1.ParagraphFormat.SpaceBefore = 18
-            s1.ParagraphFormat.SpaceAfter = 6
-            s1.ParagraphFormat.LineSpacingRule = 5  # multiple
-            s1.ParagraphFormat.LineSpacing = 13.8
-            s1.ParagraphFormat.KeepWithNext = True
-            s1.ParagraphFormat.KeepTogether = False
+            if has_style_params:
+                align_map = {"left": 0, "center": 1, "right": 2, "justify": 3}
+                align_val = align_map.get(alignment.lower()) if alignment else None
 
-            # --- Customize Heading 2 style ---
-            s2 = doc.Styles(-3)  # wdStyleHeading2
-            s2.Font.Name = "Cambria"
-            s2.Font.Size = 11
-            s2.Font.Bold = True
-            s2.Font.Italic = False
-            s2.Font.Color = color_int
-            s2.ParagraphFormat.Alignment = 3
-            s2.ParagraphFormat.SpaceBefore = 12
-            s2.ParagraphFormat.SpaceAfter = 6
-            s2.ParagraphFormat.LineSpacingRule = 5
-            s2.ParagraphFormat.LineSpacing = 13.8
-            s2.ParagraphFormat.KeepWithNext = True
-            s2.ParagraphFormat.KeepTogether = False
+                color_int = None
+                if font_color:
+                    c = font_color.lstrip("#")
+                    r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+                    color_int = r + (g << 8) + (b << 16)
+
+                for style_id, size, sp_before, sp_after in [
+                    (-2, h1_size, h1_space_before, h1_space_after),
+                    (-3, h2_size, h2_space_before, h2_space_after),
+                ]:
+                    s = doc.Styles(style_id)
+                    if font_name is not None:
+                        s.Font.Name = font_name
+                    if size is not None:
+                        s.Font.Size = size
+                    if bold is not None:
+                        s.Font.Bold = bold
+                        s.Font.Italic = False
+                    if color_int is not None:
+                        s.Font.Color = color_int
+                    if align_val is not None:
+                        s.ParagraphFormat.Alignment = align_val
+                    if sp_before is not None:
+                        s.ParagraphFormat.SpaceBefore = sp_before
+                    if sp_after is not None:
+                        s.ParagraphFormat.SpaceAfter = sp_after
+                    if line_spacing is not None:
+                        s.ParagraphFormat.LineSpacingRule = 5  # multiple
+                        s.ParagraphFormat.LineSpacing = line_spacing
+                    s.ParagraphFormat.KeepWithNext = True
+                    s.ParagraphFormat.KeepTogether = False
 
             # --- Create multilevel list template ---
             lt = doc.ListTemplates.Add(OutlineNumbered=True)

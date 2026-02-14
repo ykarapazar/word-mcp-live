@@ -263,7 +263,7 @@ def generate_mcp_config_uvx(transport_config):
         "mcpServers": {
             "word-document-server": {
                 "command": "uvx",
-                "args": ["--from", "word-mcp-server", "word_mcp_server"],
+                "args": ["--from", "word-mcp-live", "word_mcp_server"],
                 "env": env
             }
         }
@@ -334,11 +334,11 @@ def install_from_pypi():
     """
     print("\nInstalling word-document-server from PyPI...")
     try:
-        subprocess.run([sys.executable, "-m", "pip", "install", "word-mcp-server"], check=True)
-        print("word-mcp-server successfully installed from PyPI!")
+        subprocess.run([sys.executable, "-m", "pip", "install", "word-mcp-live"], check=True)
+        print("word-mcp-live successfully installed from PyPI!")
         return True
     except subprocess.CalledProcessError:
-        print("Failed to install word-mcp-server from PyPI.")
+        print("Failed to install word-mcp-live from PyPI.")
         return False
 
 def print_config_instructions(config_path, transport_config):

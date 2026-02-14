@@ -214,7 +214,7 @@ These require Windows with Microsoft Word installed. They operate on documents *
 | `word_live_format_text` | Format text (bold, italic, font, highlight, paragraph alignment) |
 | `word_live_add_table` | Add a table |
 | `word_live_apply_list` | Apply or remove bullet/numbered list formatting |
-| `word_live_setup_heading_numbering` | Apply multilevel list numbering to headings |
+| `word_live_setup_heading_numbering` | Apply multilevel list numbering to headings with optional style customization (font, size, color, spacing, alignment) |
 | `word_live_undo` | Undo last N operations (each tool call = one undo entry) |
 | **Reading** | |
 | `word_live_get_text` | Get all text paragraph by paragraph |

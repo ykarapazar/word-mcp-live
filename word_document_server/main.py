@@ -948,9 +948,23 @@ def register_tools():
         h1_paragraphs: list = None,
         h2_paragraphs: list = None,
         strip_manual_numbers: bool = True,
+        font_name: str = None,
+        h1_size: float = None,
+        h2_size: float = None,
+        bold: bool = None,
+        alignment: str = None,
+        font_color: str = None,
+        h1_space_before: float = None,
+        h1_space_after: float = None,
+        h2_space_before: float = None,
+        h2_space_after: float = None,
+        line_spacing: float = None,
     ):
         return live_tools.word_live_setup_heading_numbering(
             filename, h1_paragraphs, h2_paragraphs, strip_manual_numbers,
+            font_name, h1_size, h2_size, bold, alignment, font_color,
+            h1_space_before, h1_space_after, h2_space_before, h2_space_after,
+            line_spacing,
         )
 
     # --- Live read tools (Windows only, requires Word running) ---
