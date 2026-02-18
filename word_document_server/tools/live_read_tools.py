@@ -49,6 +49,7 @@ async def word_live_get_paragraph_format(
     filename: str = None,
     start_paragraph: int = None,
     end_paragraph: int = None,
+    include_runs: bool = False,
 ) -> str:
     """[Windows only] Inspect paragraph formatting properties for diagnostics.
 
@@ -61,10 +62,16 @@ async def word_live_get_paragraph_format(
     line_spacing, line_spacing_rule, page_break_before, keep_with_next, keep_together.
     Also: list_type, list_level, list_string (if paragraph is in a list), highlight_color.
 
+    When include_runs=True, each paragraph also includes a "runs" array with per-run
+    formatting: text, bold, italic, font_name, font_size. Consecutive words with identical
+    formatting are grouped into a single run. Useful for detecting which specific words
+    are bold/italic (e.g., bold sub-clause numbers in otherwise normal text).
+
     Args:
         filename: Document name or path (None = active document).
         start_paragraph: First paragraph (1-indexed, required).
         end_paragraph: Last paragraph (1-indexed, defaults to start_paragraph).
+        include_runs: Include per-run (word-level) formatting detail (default False).
 
     Returns:
         JSON with formatting details per paragraph.
@@ -142,6 +149,37 @@ async def word_live_get_paragraph_format(
             except Exception:
                 pass
 
+            # Per-run formatting (word-level detail)
+            if include_runs:
+                try:
+                    runs = []
+                    current_run = None
+                    for w_idx in range(1, rng.Words.Count + 1):
+                        word = rng.Words(w_idx)
+                        w_bold = word.Font.Bold
+                        w_italic = word.Font.Italic
+                        w_fname = str(word.Font.Name) if word.Font.Name else ""
+                        w_fsize = word.Font.Size if word.Font.Size else None
+                        fmt = {
+                            "bold": bool(w_bold) if w_bold != 9999999 else "mixed",
+                            "italic": bool(w_italic) if w_italic != 9999999 else "mixed",
+                            "font_name": w_fname if w_fname != "9999999" else "mixed",
+                            "font_size": w_fsize if w_fsize != 9999999 else "mixed",
+                        }
+                        if current_run and current_run["_fmt"] == fmt:
+                            current_run["text"] += word.Text
+                        else:
+                            if current_run:
+                                del current_run["_fmt"]
+                                runs.append(current_run)
+                            current_run = {"text": word.Text, **fmt, "_fmt": fmt}
+                    if current_run:
+                        del current_run["_fmt"]
+                        runs.append(current_run)
+                    info["runs"] = runs
+                except Exception:
+                    info["runs_error"] = "Could not read word-level formatting"
+
             results.append(info)
 
         return json.dumps({
@@ -213,15 +251,23 @@ async def word_live_find_text(
     search_text: str = "",
     match_case: bool = False,
     whole_word: bool = False,
+    use_wildcards: bool = False,
+    context_chars: int = 60,
     max_results: int = 50,
 ) -> str:
     """Find text in an open Word document.
 
+    Supports Word special characters when use_wildcards=True:
+    ^m (manual page break), ^t (tab), ^p (paragraph mark), and Word wildcard syntax.
+    Note: whole_word is ignored when use_wildcards is True (Word limitation).
+
     Args:
         filename: Document name or path (None = active document).
-        search_text: Text to search for.
+        search_text: Text to search for. With use_wildcards=True, supports ^m, ^t, ^p and Word wildcards.
         match_case: Case-sensitive search.
-        whole_word: Match whole words only.
+        whole_word: Match whole words only (ignored when use_wildcards=True).
+        use_wildcards: Enable Word wildcards and special characters (^m, ^t, ^p, etc.).
+        context_chars: Characters of context before/after each match (default 60).
         max_results: Maximum number of matches to return.
 
     Returns:
@@ -247,7 +293,8 @@ async def word_live_find_text(
             found = rng.Find.Execute(
                 FindText=search_text,
                 MatchCase=match_case,
-                MatchWholeWord=whole_word,
+                MatchWholeWord=whole_word if not use_wildcards else False,
+                MatchWildcards=use_wildcards,
                 Forward=True,
                 Wrap=0,  # wdFindStop
             )
@@ -256,8 +303,8 @@ async def word_live_find_text(
 
             # Get surrounding context
             context_rng = rng.Duplicate
-            context_start = max(0, rng.Start - 30)
-            context_end = min(doc.Content.End, rng.End + 30)
+            context_start = max(0, rng.Start - context_chars)
+            context_end = min(doc.Content.End, rng.End + context_chars)
             context_rng.SetRange(context_start, context_end)
 
             matches.append({
@@ -745,6 +792,153 @@ async def word_live_get_undo_history(
             "document": doc.Name,
             "undo_entries": entries,
             "count": len(entries),
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_diagnose_layout(
+    filename: str = None,
+) -> str:
+    """[Windows only] Scan an open Word document for common layout problems.
+
+    Performs a single-pass scan of all paragraphs and reports issues that cause
+    unexpected layout behavior (empty pages, content pushed to wrong page, etc.).
+
+    Checks performed:
+    1. keep_with_next chains: 5+ consecutive paragraphs with keep_with_next=true
+       push content to the next page as a block (severity: high).
+    2. Heading styles on body text: Heading style on paragraphs >100 chars (medium).
+    3. PageBreakBefore on non-headings: may cause unexpected blank space (medium).
+    4. Manual page break count: ^m characters found via Find (info).
+    5. Style summary: count of paragraphs per style, flags if >50% use Heading styles.
+
+    Args:
+        filename: Document name or path (None = active document).
+
+    Returns:
+        JSON with issues array, style_summary dict, and issue_count.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        issues = []
+        style_counts = {}
+        total_paras = doc.Paragraphs.Count
+
+        # Single-pass paragraph scan
+        kwn_chain_start = None
+        kwn_chain_len = 0
+
+        for i in range(1, total_paras + 1):
+            para = doc.Paragraphs(i)
+            fmt = para.Format
+            rng = para.Range
+            text = rng.Text.rstrip("\r\x07")
+            style_name = str(rng.Style) if rng.Style else "Unknown"
+
+            # Style summary
+            style_counts[style_name] = style_counts.get(style_name, 0) + 1
+
+            kwn = bool(fmt.KeepWithNext)
+
+            # Track keep_with_next chains
+            if kwn:
+                if kwn_chain_start is None:
+                    kwn_chain_start = i
+                    kwn_chain_len = 1
+                else:
+                    kwn_chain_len += 1
+            else:
+                if kwn_chain_start is not None and kwn_chain_len >= 5:
+                    issues.append({
+                        "type": "keep_with_next_chain",
+                        "severity": "high",
+                        "start_paragraph": kwn_chain_start,
+                        "end_paragraph": kwn_chain_start + kwn_chain_len - 1,
+                        "length": kwn_chain_len,
+                        "detail": f"{kwn_chain_len} consecutive keep_with_next paragraphs (may push content to next page)",
+                    })
+                kwn_chain_start = None
+                kwn_chain_len = 0
+
+            # Heading style on body text
+            is_heading = style_name.lower().startswith("heading") or style_name.startswith("Başlık")
+            if is_heading and len(text) > 100:
+                issues.append({
+                    "type": "heading_on_body_text",
+                    "severity": "medium",
+                    "paragraph": i,
+                    "style": style_name,
+                    "text_length": len(text),
+                    "detail": f"{style_name} on {len(text)}-char paragraph (headings should be short)",
+                })
+
+            # PageBreakBefore on non-heading
+            if bool(fmt.PageBreakBefore) and not is_heading and i > 1:
+                issues.append({
+                    "type": "page_break_before_misuse",
+                    "severity": "medium",
+                    "paragraph": i,
+                    "style": style_name,
+                    "detail": f"PageBreakBefore on non-heading paragraph (style: {style_name})",
+                })
+
+        # Flush final chain
+        if kwn_chain_start is not None and kwn_chain_len >= 5:
+            issues.append({
+                "type": "keep_with_next_chain",
+                "severity": "high",
+                "start_paragraph": kwn_chain_start,
+                "end_paragraph": kwn_chain_start + kwn_chain_len - 1,
+                "length": kwn_chain_len,
+                "detail": f"{kwn_chain_len} consecutive keep_with_next paragraphs (may push content to next page)",
+            })
+
+        # Manual page break count via Find
+        manual_breaks = 0
+        try:
+            find_rng = doc.Content.Duplicate
+            find_rng.Find.ClearFormatting()
+            while find_rng.Find.Execute(FindText="^m", Forward=True, Wrap=0):
+                manual_breaks += 1
+                find_rng.SetRange(find_rng.End, doc.Content.End)
+        except Exception:
+            pass
+        if manual_breaks > 0:
+            issues.append({
+                "type": "manual_page_breaks",
+                "severity": "info",
+                "count": manual_breaks,
+                "detail": f"{manual_breaks} manual page break character(s) found",
+            })
+
+        # Flag if >50% paragraphs use Heading styles
+        heading_count = sum(v for k, v in style_counts.items()
+                           if k.lower().startswith("heading") or k.startswith("Başlık"))
+        if total_paras > 0 and heading_count > total_paras * 0.5:
+            issues.append({
+                "type": "excessive_heading_styles",
+                "severity": "high",
+                "heading_paragraphs": heading_count,
+                "total_paragraphs": total_paras,
+                "detail": f"{heading_count}/{total_paras} paragraphs use Heading styles (>50%)",
+            })
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "total_paragraphs": total_paras,
+            "issues": issues,
+            "issue_count": len(issues),
+            "style_summary": style_counts,
         }, ensure_ascii=False)
 
     except Exception as e:

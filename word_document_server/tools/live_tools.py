@@ -95,6 +95,8 @@ async def word_live_format_text(
     filename: str = None,
     start: int = None,
     end: int = None,
+    start_paragraph: int = None,
+    end_paragraph: int = None,
     bold: bool = None,
     italic: bool = None,
     underline: bool = None,
@@ -104,15 +106,23 @@ async def word_live_format_text(
     highlight_color: int = None,
     style_name: str = None,
     paragraph_alignment: str = None,
+    page_break_before: bool = None,
+    preserve_direct_formatting: bool = False,
     track_changes: bool = False,
 ) -> str:
-    """[Windows only] Format text in an open Word document: font, color, highlight, style, alignment.
+    """[Windows only] Format text in an open Word document: font, color, highlight, style, alignment, page breaks.
     Use this tool for any visual/formatting change that does NOT alter the text content itself.
+
+    Two addressing modes (provide one):
+    - start/end: Character positions (from word_live_find_text or word_live_get_page_text).
+    - start_paragraph/end_paragraph: 1-indexed paragraph range (from word_live_get_text etc.).
 
     Args:
         filename: Document name or path (None = active document).
-        start: Start character position (required). Use word_live_find_text to get positions.
-        end: End character position (required).
+        start: Start character position.
+        end: End character position.
+        start_paragraph: First paragraph index (1-indexed). Alternative to start/end.
+        end_paragraph: Last paragraph index (1-indexed, defaults to start_paragraph).
         bold: Set bold (True/False).
         italic: Set italic (True/False).
         underline: Set underline (True/False).
@@ -128,11 +138,11 @@ async def word_live_format_text(
         style_name: Apply a named Word style (e.g., "Heading 1", "Normal").
         paragraph_alignment: Paragraph alignment — "left" (0), "center" (1), "right" (2), "justify" (3).
             Applies to ALL paragraphs in the selected range.
+        page_break_before: Set or clear PageBreakBefore on paragraphs in range (True/False).
+        preserve_direct_formatting: When True and style_name is set, saves font/size/bold/italic/
+            alignment/spacing before applying the style and restores them after. Useful for changing
+            a paragraph's style (e.g., Heading 5 → Normal) without losing its visual formatting.
         track_changes: Track formatting changes as revisions.
-
-    Note: To change formatting without changing text (e.g., remove highlight,
-    change font), use this tool. For text content changes, use track_replace
-    or word_live_insert_text instead.
 
     Returns:
         JSON with result info.
@@ -140,17 +150,32 @@ async def word_live_format_text(
     if sys.platform != "win32":
         return json.dumps({"error": "Live editing is only available on Windows"})
 
-    if start is None or end is None:
-        return json.dumps(
-            {"error": "Both 'start' and 'end' character positions are required"}
-        )
-
     try:
         from word_document_server.core.word_com import get_word_app, find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
-        rng = doc.Range(start, end)
+
+        # Resolve addressing mode
+        if start_paragraph is not None:
+            if end_paragraph is None:
+                end_paragraph = start_paragraph
+            total_paras = doc.Paragraphs.Count
+            if start_paragraph < 1 or end_paragraph > total_paras:
+                return json.dumps({
+                    "error": f"Paragraph range {start_paragraph}-{end_paragraph} out of bounds (doc has {total_paras} paragraphs)"
+                })
+            p_start = doc.Paragraphs(start_paragraph).Range.Start
+            p_end = doc.Paragraphs(end_paragraph).Range.End
+            rng = doc.Range(p_start, p_end)
+            range_label = f"para {start_paragraph}-{end_paragraph}"
+        elif start is not None and end is not None:
+            rng = doc.Range(start, end)
+            range_label = f"{start}-{end}"
+        else:
+            return json.dumps(
+                {"error": "Provide start/end character positions OR start_paragraph/end_paragraph"}
+            )
 
         with undo_record(app, "MCP: Format Text"):
             prev_tracking = doc.TrackRevisions
@@ -160,6 +185,25 @@ async def word_live_format_text(
                 app.UserName = DEFAULT_AUTHOR
 
             try:
+                # Save direct formatting before style change if requested
+                saved_formats = []
+                if preserve_direct_formatting and style_name is not None:
+                    for para in rng.Paragraphs:
+                        pr = para.Range
+                        pf = para.Format
+                        saved_formats.append({
+                            "para": para,
+                            "font_name": str(pr.Font.Name) if pr.Font.Name and pr.Font.Name != 9999999 else None,
+                            "font_size": pr.Font.Size if pr.Font.Size and pr.Font.Size != 9999999 else None,
+                            "bold": pr.Font.Bold if pr.Font.Bold != 9999999 else None,
+                            "italic": pr.Font.Italic if pr.Font.Italic != 9999999 else None,
+                            "alignment": pf.Alignment,
+                            "space_before": pf.SpaceBefore,
+                            "space_after": pf.SpaceAfter,
+                            "line_spacing": pf.LineSpacing,
+                            "line_spacing_rule": pf.LineSpacingRule,
+                        })
+
                 if bold is not None:
                     rng.Font.Bold = bold
                 if italic is not None:
@@ -177,7 +221,28 @@ async def word_live_format_text(
                 if highlight_color is not None:
                     rng.HighlightColorIndex = highlight_color
                 if style_name is not None:
-                    rng.Style = style_name
+                    if preserve_direct_formatting:
+                        # Apply style per-paragraph and restore formatting
+                        for sf in saved_formats:
+                            p = sf["para"]
+                            p.Style = doc.Styles(style_name)
+                            pr = p.Range
+                            pf = p.Format
+                            if sf["font_name"] is not None:
+                                pr.Font.Name = sf["font_name"]
+                            if sf["font_size"] is not None:
+                                pr.Font.Size = sf["font_size"]
+                            if sf["bold"] is not None:
+                                pr.Font.Bold = sf["bold"]
+                            if sf["italic"] is not None:
+                                pr.Font.Italic = sf["italic"]
+                            pf.Alignment = sf["alignment"]
+                            pf.SpaceBefore = sf["space_before"]
+                            pf.SpaceAfter = sf["space_after"]
+                            pf.LineSpacingRule = sf["line_spacing_rule"]
+                            pf.LineSpacing = sf["line_spacing"]
+                    else:
+                        rng.Style = style_name
                 if paragraph_alignment is not None:
                     align_map = {"left": 0, "center": 1, "right": 2, "justify": 3}
                     al = align_map.get(paragraph_alignment.lower())
@@ -185,6 +250,9 @@ async def word_live_format_text(
                         return json.dumps({"error": f"Invalid alignment: {paragraph_alignment}. Use: left, center, right, justify"})
                     for para in rng.Paragraphs:
                         para.Format.Alignment = al
+                if page_break_before is not None:
+                    for para in rng.Paragraphs:
+                        para.Format.PageBreakBefore = page_break_before
             finally:
                 if track_changes:
                     doc.TrackRevisions = prev_tracking
@@ -198,7 +266,7 @@ async def word_live_format_text(
             {
                 "success": True,
                 "document": doc.Name,
-                "range": f"{start}-{end}",
+                "range": range_label,
                 "text_preview": preview,
                 "tracked": track_changes,
             }
@@ -216,20 +284,27 @@ async def word_live_apply_list(
     level: int = 0,
     remove: bool = False,
     continue_previous: bool = False,
+    number_format: dict = None,
+    start_at: dict = None,
     track_changes: bool = False,
 ) -> str:
-    """[Windows only] Apply or remove bullet/numbered list formatting on paragraphs in an open Word document.
+    """[Windows only] Apply or remove bullet/numbered/multilevel list formatting on paragraphs.
 
     Args:
         filename: Document name or path (None = active document).
         start_paragraph: First paragraph to format (1-indexed, required).
         end_paragraph: Last paragraph to format (1-indexed, defaults to start_paragraph).
-        list_type: "bullet" for bullet list, "number" for numbered list.
+        list_type: "bullet", "number", or "multilevel" (outline numbered).
         level: Indentation level (0 = first level, 1 = second level, etc.).
+            For multilevel, this sets the list level per paragraph.
         remove: If True, removes list formatting from the range.
-        continue_previous: If True, continues numbering from a previous list above
-            (useful when bullets interrupt a numbered list, e.g. items 1-4, then bullets,
-            then item 5 should continue as 5 not restart at 1).
+        continue_previous: If True, continues numbering from a previous list above.
+        number_format: (multilevel only) Dict mapping level (int) to format string.
+            Example: {1: "%1.", 2: "%1.%2."} → "5.", "5.1."
+            Keys are 1-indexed levels. If not provided, defaults to {1: "%1.", 2: "%1.%2."}.
+        start_at: (multilevel only) Dict mapping level (int) to starting number.
+            Example: {1: 5} → numbering starts at 5.
+            If not provided, starts at 1.
         track_changes: Track changes as revisions.
 
     Returns:
@@ -264,27 +339,56 @@ async def word_live_apply_list(
                 app.UserName = DEFAULT_AUTHOR
 
             try:
-                # Word COM ListGallery constants:
-                # wdBulletGallery = 1, wdNumberGallery = 2, wdOutlineNumberGallery = 3
-                gallery_map = {"bullet": 1, "number": 2}
                 formatted = 0
 
-                for i in range(start_paragraph, end_paragraph + 1):
-                    para = doc.Paragraphs(i)
-                    if remove:
-                        para.Range.ListFormat.RemoveNumbers()
-                    else:
-                        gallery_idx = gallery_map.get(list_type, 1)
-                        template = doc.Application.ListGalleries(gallery_idx).ListTemplates(1)
+                if remove:
+                    for i in range(start_paragraph, end_paragraph + 1):
+                        doc.Paragraphs(i).Range.ListFormat.RemoveNumbers()
+                        formatted += 1
+                elif list_type == "multilevel":
+                    # Create custom multilevel list template (OutlineNumbered gallery)
+                    lt = doc.ListTemplates.Add(OutlineNumbered=True)
+                    # Normalize dict keys to int (JSON sends string keys)
+                    nf = {int(k): v for k, v in (number_format or {1: "%1.", 2: "%1.%2."}).items()}
+                    sa = {int(k): v for k, v in (start_at or {}).items()}
+                    for lvl_num, fmt_str in nf.items():
+                        lv = lt.ListLevels(int(lvl_num))
+                        lv.NumberFormat = fmt_str
+                        lv.NumberStyle = 0  # wdListNumberStyleArabic
+                        lv.StartAt = sa.get(int(lvl_num), 1)
+                        lv.Alignment = 0  # left
+                        lv.NumberPosition = 0
+                        lv.TextPosition = 28
+                        lv.TabPosition = 28
+                        # Do NOT set LinkedStyle — avoids Heading style side effects
+
+                    for i in range(start_paragraph, end_paragraph + 1):
+                        para = doc.Paragraphs(i)
+                        should_continue = (i > start_paragraph) or continue_previous
+                        para.Range.ListFormat.ApplyListTemplateWithLevel(
+                            ListTemplate=lt,
+                            ContinuePreviousList=should_continue,
+                            DefaultListBehavior=1,
+                        )
+                        if level > 0:
+                            para.Range.ListFormat.ListLevelNumber = level + 1
+                        formatted += 1
+                else:
+                    # bullet or number (original logic)
+                    gallery_map = {"bullet": 1, "number": 2}
+                    gallery_idx = gallery_map.get(list_type, 1)
+                    template = doc.Application.ListGalleries(gallery_idx).ListTemplates(1)
+                    for i in range(start_paragraph, end_paragraph + 1):
+                        para = doc.Paragraphs(i)
                         should_continue = (i > start_paragraph) or continue_previous
                         para.Range.ListFormat.ApplyListTemplateWithLevel(
                             ListTemplate=template,
                             ContinuePreviousList=should_continue,
-                            DefaultListBehavior=1,  # wdWord2003
+                            DefaultListBehavior=1,
                         )
                         if level > 0:
                             para.Range.ListFormat.ListLevelNumber = level + 1
-                    formatted += 1
+                        formatted += 1
             finally:
                 if track_changes:
                     doc.TrackRevisions = prev_tracking
@@ -310,6 +414,8 @@ async def word_live_setup_heading_numbering(
     h1_paragraphs: list = None,
     h2_paragraphs: list = None,
     strip_manual_numbers: bool = True,
+    h1_number_format: str = None,
+    h2_number_format: str = None,
     font_name: str = None,
     h1_size: float = None,
     h2_size: float = None,
@@ -324,10 +430,14 @@ async def word_live_setup_heading_numbering(
 ) -> str:
     """[Windows only] Set up auto-numbered headings with multilevel list (1. / 1.1).
 
-    Creates a multilevel list template: Level 1 = "1." linked to Heading 1,
-    Level 2 = "1.1" linked to Heading 2. Applies styles and numbering to the
-    specified paragraphs, then optionally strips manual number prefixes
-    (regex: ^\d+(\.\d+)*\.?\s+ — matches "1. ", "2.3 ", "10. ", etc.).
+    Creates a multilevel list template linked to Heading 1 and Heading 2 styles.
+    Default formats: Level 1 = "%1." (produces "1."), Level 2 = "%1.%2" (produces "1.1").
+    Custom formats supported — e.g., h1_number_format="MADDE %1 – " produces "MADDE 1 – ".
+
+    Applies styles and numbering to the specified paragraphs, then optionally
+    strips manual number prefixes. Recognizes two patterns:
+    - Numeric: "1. ", "6.2. ", "10.3 " (regex: ^\d+(\.\d+)*\.?\s+)
+    - MADDE: "MADDE 6 – ", "MADDE 10 - " (regex: ^MADDE\s+\d+\s*[–-]\s*)
 
     If any style parameter is provided, Heading 1 and Heading 2 styles are
     customized before applying. If no style params are given, only numbering
@@ -337,7 +447,11 @@ async def word_live_setup_heading_numbering(
         filename: Document name or path (None = active document).
         h1_paragraphs: List of 1-indexed paragraph numbers for Heading 1 (main sections).
         h2_paragraphs: List of 1-indexed paragraph numbers for Heading 2 (sub-sections).
-        strip_manual_numbers: Remove leading "N." or "N.N" text from headings (default True).
+        strip_manual_numbers: Remove leading number/MADDE prefix from headings (default True).
+        h1_number_format: Custom Level 1 format (default "%1."). Use %1 for the number.
+            Example: "MADDE %1 – " produces "MADDE 1 – ", "MADDE 2 – ", etc.
+        h2_number_format: Custom Level 2 format (default "%1.%2"). Use %1 and %2.
+            Example: "%1.%2." produces "1.1.", "1.2.", etc.
         font_name: Font family for both heading styles (e.g., "Cambria").
         h1_size: Font size in points for Heading 1 (e.g., 13).
         h2_size: Font size in points for Heading 2 (e.g., 11).
@@ -366,6 +480,19 @@ async def word_live_setup_heading_numbering(
 
         app = get_word_app()
         doc = find_document(app, filename)
+
+        def _find_para_text(doc, text):
+            """Find paragraph text in doc body, return range or None."""
+            search = text[:60] if len(text) > 60 else text
+            if not search:
+                return None
+            rng = doc.Content.Duplicate
+            rng.Find.ClearFormatting()
+            rng.Find.Execute(
+                FindText=search, Forward=True,
+                MatchCase=True, MatchWholeWord=False, Wrap=0,
+            )
+            return rng if rng.Find.Found else None
 
         with undo_record(app, "MCP: Setup Heading Numbering"):
             # --- Optionally customize heading styles ---
@@ -408,32 +535,46 @@ async def word_live_setup_heading_numbering(
                     if line_spacing is not None:
                         s.ParagraphFormat.LineSpacingRule = 5  # multiple
                         s.ParagraphFormat.LineSpacing = line_spacing
-                    s.ParagraphFormat.KeepWithNext = True
+                    # H1 keeps with next (heading stays with first body para).
+                    # H2 does NOT — sub-clauses are often full paragraphs;
+                    # chaining keep_with_next across them breaks page layout.
+                    s.ParagraphFormat.KeepWithNext = (style_id == -2)
                     s.ParagraphFormat.KeepTogether = False
 
             # --- Create multilevel list template ---
             lt = doc.ListTemplates.Add(OutlineNumbered=True)
+            h1_fmt = h1_number_format or "%1."
+            h2_fmt = h2_number_format or "%1.%2"
 
-            # Level 1: "1." linked to Heading 1
+            # Level 1 linked to Heading 1
             lv1 = lt.ListLevels(1)
-            lv1.NumberFormat = "%1."
+            lv1.NumberFormat = h1_fmt
             lv1.NumberStyle = 0  # wdListNumberStyleArabic
             lv1.StartAt = 1
             lv1.Alignment = 0  # left
             lv1.NumberPosition = 0
-            lv1.TextPosition = 28  # ~1cm indent for text after number
-            lv1.TabPosition = 28
+            if len(h1_fmt) > 5:
+                # Long format (e.g., "MADDE %1 – ") — text follows number directly
+                lv1.TextPosition = 0
+                lv1.TabPosition = 0
+            else:
+                lv1.TextPosition = 28  # ~1cm indent for text after number
+                lv1.TabPosition = 28
             lv1.LinkedStyle = "Heading 1"
 
-            # Level 2: "1.1" linked to Heading 2
+            # Level 2 linked to Heading 2
             lv2 = lt.ListLevels(2)
-            lv2.NumberFormat = "%1.%2"
+            lv2.NumberFormat = h2_fmt
             lv2.NumberStyle = 0
             lv2.StartAt = 1
             lv2.Alignment = 0
             lv2.NumberPosition = 0
-            lv2.TextPosition = 28
-            lv2.TabPosition = 28
+            if len(h2_fmt) > 5:
+                lv2.TextPosition = 0
+                lv2.TabPosition = 0
+            else:
+                lv2.TextPosition = 28
+                lv2.TabPosition = 28
             lv2.LinkedStyle = "Heading 2"
 
             # --- Apply styles to paragraphs ---
@@ -447,43 +588,92 @@ async def word_live_setup_heading_numbering(
                 all_heading_paras.append((idx, -3))  # wdStyleHeading2
             all_heading_paras.sort(key=lambda x: x[0])
 
+            target_style = {-2: doc.Styles(-2), -3: doc.Styles(-3)}
+
             for para_idx, style_id in all_heading_paras:
                 if para_idx < 1 or para_idx > doc.Paragraphs.Count:
                     continue
                 para = doc.Paragraphs(para_idx)
-                para.Style = doc.Styles(style_id)
+                text = para.Range.Text.rstrip("\r\x07")
+                range_len = para.Range.End - para.Range.Start
+                text_len = len(text)
+                inflated = (range_len > text_len + 5)
+
+                if not inflated:
+                    # Normal paragraph — direct style assignment works.
+                    try:
+                        para.Range.ListFormat.RemoveNumbers()
+                    except Exception:
+                        pass
+                    para.Style = target_style[style_id]
+                else:
+                    # Inflated Range (comments/fields extend it beyond text).
+                    # Use Find to locate text, then Expand to full paragraph
+                    # so the paragraph mark gets the style.
+                    found = _find_para_text(doc, text)
+                    if found:
+                        try:
+                            found.ListFormat.RemoveNumbers()
+                        except Exception:
+                            pass
+                        # Expand found range to full paragraph (includes \r mark)
+                        found.Expand(Unit=4)  # wdParagraph
+                        found.Style = target_style[style_id]
+
                 if style_id == -2:
                     h1_applied += 1
                 else:
                     h2_applied += 1
 
-            # --- Apply list template to all heading paragraphs ---
-            for para_idx, _ in all_heading_paras:
-                if para_idx < 1 or para_idx > doc.Paragraphs.Count:
-                    continue
-                para = doc.Paragraphs(para_idx)
-                para.Range.ListFormat.ApplyListTemplateWithLevel(
+            # --- Apply list template via LinkedStyle propagation ---
+            # Apply list to FIRST H1 paragraph only. Because the template
+            # has LinkedStyle for Heading 1 and Heading 2, Word auto-applies
+            # the correct list level to ALL paragraphs with those styles.
+            # This avoids per-paragraph Range issues (inflated Range.End
+            # from comments/fields/bookmarks breaks per-paragraph approach).
+            if h1_paragraphs:
+                first_h1 = doc.Paragraphs(sorted(h1_paragraphs)[0])
+                first_h1.Range.ListFormat.ApplyListTemplateWithLevel(
                     ListTemplate=lt,
-                    ContinuePreviousList=True,
+                    ContinuePreviousList=False,
                     DefaultListBehavior=1,
                 )
 
             # --- Strip manual numbers ---
             stripped = 0
             if strip_manual_numbers:
+                strip_patterns = [
+                    r"^MADDE\s+\d+\s*[–\-]\s*",  # "MADDE 6 – ", "MADDE 10 - "
+                    r"^\d+(\.\d+)*\.?\s+",         # "1. ", "6.2. ", "10.3 "
+                ]
                 for para_idx, _ in all_heading_paras:
                     if para_idx < 1 or para_idx > doc.Paragraphs.Count:
                         continue
                     para = doc.Paragraphs(para_idx)
                     text = para.Range.Text.rstrip("\r\x07")
-                    # Match patterns: "1. ", "1.1 ", "2.3 ", "10. ", "10.2 ", etc.
-                    m = re.match(r"^\d+(\.\d+)*\.?\s+", text)
-                    if m:
-                        # Delete the matched prefix
-                        prefix_len = len(m.group(0))
-                        rng = doc.Range(para.Range.Start, para.Range.Start + prefix_len)
-                        rng.Delete()
-                        stripped += 1
+                    for pattern in strip_patterns:
+                        m = re.match(pattern, text)
+                        if m:
+                            prefix_len = len(m.group(0))
+                            range_len = para.Range.End - para.Range.Start
+                            if range_len <= len(text) + 5:
+                                # Normal — para.Range.Start is reliable
+                                rng = doc.Range(
+                                    para.Range.Start,
+                                    para.Range.Start + prefix_len,
+                                )
+                            else:
+                                # Inflated — find text to get real position
+                                found = _find_para_text(doc, text)
+                                if not found:
+                                    break
+                                rng = doc.Range(
+                                    found.Start,
+                                    found.Start + prefix_len,
+                                )
+                            rng.Delete()
+                            stripped += 1
+                            break
 
         return json.dumps({
             "success": True,
@@ -492,6 +682,100 @@ async def word_live_setup_heading_numbering(
             "h2_applied": h2_applied,
             "stripped": stripped,
         })
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_replace_text(
+    filename: str = None,
+    find_text: str = "",
+    replace_text: str = "",
+    match_case: bool = False,
+    match_whole_word: bool = False,
+    use_wildcards: bool = False,
+    replace_all: bool = True,
+    track_changes: bool = False,
+) -> str:
+    """[Windows only] Find and replace text in an open Word document.
+
+    Uses Word's native Find & Replace, which works across tracked change boundaries
+    (unlike manual delete+insert). Supports Word special characters when use_wildcards=True:
+    ^m (manual page break), ^t (tab), ^p (paragraph mark), and Word wildcard syntax.
+
+    Args:
+        filename: Document name or path (None = active document).
+        find_text: Text to find. With use_wildcards=True, supports ^m, ^t, ^p and Word wildcards.
+        replace_text: Replacement text. Use "" to delete matches.
+        match_case: Case-sensitive search.
+        match_whole_word: Match whole words only (ignored when use_wildcards=True).
+        use_wildcards: Enable Word wildcards and special characters.
+        replace_all: Replace all occurrences (True) or just the first one (False).
+        track_changes: Track replacements as revisions.
+
+    Returns:
+        JSON with count of replacements made.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    if not find_text:
+        return json.dumps({"error": "find_text is required"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        with undo_record(app, "MCP: Replace Text"):
+            prev_tracking = doc.TrackRevisions
+            prev_author = app.UserName
+            if track_changes:
+                doc.TrackRevisions = True
+                app.UserName = DEFAULT_AUTHOR
+
+            try:
+                count = 0
+                rng = doc.Content.Duplicate
+                rng.Find.ClearFormatting()
+                rng.Find.Replacement.ClearFormatting()
+
+                # Loop with wdReplaceOne (=1) to count replacements
+                while True:
+                    found = rng.Find.Execute(
+                        FindText=find_text,
+                        ReplaceWith=replace_text,
+                        MatchCase=match_case,
+                        MatchWholeWord=match_whole_word if not use_wildcards else False,
+                        MatchWildcards=use_wildcards,
+                        Forward=True,
+                        Wrap=0,  # wdFindStop
+                        Replace=1,  # wdReplaceOne
+                    )
+                    if not found:
+                        break
+                    count += 1
+                    if not replace_all:
+                        break
+                    # Reset range to search remaining document
+                    rng = doc.Content.Duplicate
+                    rng.Find.ClearFormatting()
+                    rng.Find.Replacement.ClearFormatting()
+            finally:
+                if track_changes:
+                    doc.TrackRevisions = prev_tracking
+                    app.UserName = prev_author
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "find_text": find_text,
+            "replace_text": replace_text,
+            "replacements": count,
+            "replace_all": replace_all,
+            "tracked": track_changes,
+        }, ensure_ascii=False)
 
     except Exception as e:
         return json.dumps({"error": str(e)})

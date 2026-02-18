@@ -859,6 +859,8 @@ def register_tools():
         filename: str = None,
         start: int = None,
         end: int = None,
+        start_paragraph: int = None,
+        end_paragraph: int = None,
         bold: bool = None,
         italic: bool = None,
         underline: bool = None,
@@ -868,12 +870,38 @@ def register_tools():
         highlight_color: int = None,
         style_name: str = None,
         paragraph_alignment: str = None,
+        page_break_before: bool = None,
+        preserve_direct_formatting: bool = False,
         track_changes: bool = False,
     ):
         return live_tools.word_live_format_text(
-            filename, start, end, bold, italic, underline,
+            filename, start, end, start_paragraph, end_paragraph,
+            bold, italic, underline,
             font_name, font_size, font_color, highlight_color,
-            style_name, paragraph_alignment, track_changes,
+            style_name, paragraph_alignment, page_break_before,
+            preserve_direct_formatting, track_changes,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Replace Text",
+            destructiveHint=True,
+        ),
+        description=live_tools.word_live_replace_text.__doc__,
+    )
+    def word_live_replace_text(
+        filename: str = None,
+        find_text: str = "",
+        replace_text: str = "",
+        match_case: bool = False,
+        match_whole_word: bool = False,
+        use_wildcards: bool = False,
+        replace_all: bool = True,
+        track_changes: bool = False,
+    ):
+        return live_tools.word_live_replace_text(
+            filename, find_text, replace_text, match_case,
+            match_whole_word, use_wildcards, replace_all, track_changes,
         )
 
     @mcp.tool(
@@ -929,11 +957,14 @@ def register_tools():
         level: int = 0,
         remove: bool = False,
         continue_previous: bool = False,
+        number_format: dict = None,
+        start_at: dict = None,
         track_changes: bool = False,
     ):
         return live_tools.word_live_apply_list(
             filename, start_paragraph, end_paragraph, list_type,
-            level, remove, continue_previous, track_changes,
+            level, remove, continue_previous, number_format,
+            start_at, track_changes,
         )
 
     @mcp.tool(
@@ -948,6 +979,8 @@ def register_tools():
         h1_paragraphs: list = None,
         h2_paragraphs: list = None,
         strip_manual_numbers: bool = True,
+        h1_number_format: str = None,
+        h2_number_format: str = None,
         font_name: str = None,
         h1_size: float = None,
         h2_size: float = None,
@@ -962,6 +995,7 @@ def register_tools():
     ):
         return live_tools.word_live_setup_heading_numbering(
             filename, h1_paragraphs, h2_paragraphs, strip_manual_numbers,
+            h1_number_format, h2_number_format,
             font_name, h1_size, h2_size, bold, alignment, font_color,
             h1_space_before, h1_space_after, h2_space_before, h2_space_after,
             line_spacing,
@@ -990,9 +1024,10 @@ def register_tools():
         filename: str = None,
         start_paragraph: int = None,
         end_paragraph: int = None,
+        include_runs: bool = False,
     ):
         return live_read_tools.word_live_get_paragraph_format(
-            filename, start_paragraph, end_paragraph,
+            filename, start_paragraph, end_paragraph, include_runs,
         )
 
     @mcp.tool(
@@ -1016,11 +1051,16 @@ def register_tools():
         search_text: str = "",
         match_case: bool = False,
         whole_word: bool = False,
+        use_wildcards: bool = False,
+        context_chars: int = 60,
         max_results: int = 50,
     ):
-        """[Windows only] Find text in a Word document open in Word. Returns positions and context. Requires Word running."""
+        """[Windows only] Find text in a Word document open in Word. Returns positions and context.
+        With use_wildcards=True, supports ^m (page break), ^t (tab), ^p (paragraph mark) and Word wildcards.
+        context_chars controls how many characters of surrounding context to return (default 60). Requires Word running."""
         return live_read_tools.word_live_find_text(
-            filename, search_text, match_case, whole_word, max_results
+            filename, search_text, match_case, whole_word,
+            use_wildcards, context_chars, max_results,
         )
 
     @mcp.tool(
@@ -1137,6 +1177,16 @@ def register_tools():
         """[Windows only] Undo the last N operations in a Word document open in Word.
         Each MCP tool call is one undo entry. Requires Word running."""
         return live_tools.word_live_undo(filename, times)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Diagnose Layout",
+            readOnlyHint=True,
+        ),
+        description=live_read_tools.word_live_diagnose_layout.__doc__,
+    )
+    def word_live_diagnose_layout(filename: str = None):
+        return live_read_tools.word_live_diagnose_layout(filename)
 
     # --- Live layout tools (Windows only, requires Word running) ---
 
