@@ -6,13 +6,10 @@
 
 `105 tools` &middot; `Dual-mode architecture` &middot; `Live COM editing` &middot; `Cross-platform`
 
-[![PyPI version](https://img.shields.io/pypi/v/word-mcp-live?color=blue)](https://pypi.org/project/word-mcp-live/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tools: 105](https://img.shields.io/badge/tools-105-orange)]()
 [![Platform: Windows + macOS/Linux](https://img.shields.io/badge/platform-Windows%20%2B%20macOS%2FLinux-lightgrey)]()
-[![PyPI Downloads](https://img.shields.io/pypi/dm/word-mcp-live)](https://pypi.org/project/word-mcp-live/)
-[![Smithery](https://smithery.ai/badge/word-mcp-live)](https://smithery.ai/server/word-mcp-live)
 
 </div>
 
