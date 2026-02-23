@@ -916,12 +916,39 @@ def register_tools():
         cols: int = 2,
         position: str = "end",
         data: list = None,
+        style: str = "Table Grid",
+        autofit: str = "window",
         track_changes: bool = False,
     ):
         """[Windows only] Add a table to a Word document open in Word.
-        Optionally provide data as 2D list. Requires Word running."""
+        Optionally provide data as 2D list. Default style is 'Table Grid' with
+        autofit to window width. Set style=None for no style, autofit=None for
+        legacy fixed behavior. Requires Word running."""
         return live_tools.word_live_add_table(
-            filename, rows, cols, position, data, track_changes
+            filename, rows, cols, position, data, style, autofit, track_changes
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Format Table",
+            destructiveHint=True,
+        ),
+        description=live_tools.word_live_format_table.__doc__,
+    )
+    def word_live_format_table(
+        filename: str = None,
+        table_index: int = -1,
+        border_style: str = None,
+        cell_bold: list = None,
+        cell_alignment: list = None,
+        column_widths: list = None,
+        table_alignment: str = None,
+        cell_shading: list = None,
+        autofit: str = None,
+    ):
+        return live_tools.word_live_format_table(
+            filename, table_index, border_style, cell_bold, cell_alignment,
+            column_widths, table_alignment, cell_shading, autofit
         )
 
     @mcp.tool(
