@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "word-mcp-live"
 version = "1.2.0"
-description = "MCP server for Microsoft Word — 105 tools with live COM automation on Windows"
+description = "MCP server for Microsoft Word with live COM automation on Windows"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
