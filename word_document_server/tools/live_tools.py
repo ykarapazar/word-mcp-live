@@ -1130,6 +1130,137 @@ async def word_live_delete_text(
         return json.dumps({"error": str(e)})
 
 
+async def word_live_modify_table(
+    filename: str = None,
+    table_index: int = 1,
+    operation: str = "get_info",
+    row: int = None,
+    col: int = None,
+    text: str = None,
+    before_row: int = None,
+    before_col: int = None,
+    header: str = None,
+    cells: list = None,
+    start_row: int = None,
+    start_col: int = None,
+    end_row: int = None,
+    end_col: int = None,
+    autofit_mode: str = "content",
+    track_changes: bool = False,
+) -> str:
+    """[Windows only] Modify a table in an open Word document.
+
+    Operations: get_info, set_cell, add_column, delete_column,
+    add_row, delete_row, merge_cells, autofit.
+    All row/col indices are 1-based (Word COM standard).
+
+    Args:
+        filename: Document name or path (None = active document).
+        table_index: 1-based table index (default 1).
+        operation: One of: get_info, set_cell, add_column, delete_column,
+            add_row, delete_row, merge_cells, autofit.
+        row: Row index for set_cell, delete_row.
+        col: Column index for set_cell, delete_column.
+        text: Text for set_cell.
+        before_row: Insert row before this index (add_row). None = append at end.
+        before_col: Insert column before this index (add_column). None = append at end.
+        header: Header text for new column (add_column, placed in row 1).
+        cells: List of cell values for new row/column.
+        start_row: Start row for merge_cells.
+        start_col: Start column for merge_cells.
+        end_row: End row for merge_cells.
+        end_col: End column for merge_cells.
+        autofit_mode: 'content', 'window', or 'fixed' (autofit operation).
+        track_changes: Track modifications as revisions.
+
+    Returns:
+        JSON with operation result.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core import table_com
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        if doc.Tables.Count == 0:
+            return json.dumps({"error": "Document has no tables"})
+
+        if table_index < 1 or table_index > doc.Tables.Count:
+            return json.dumps({"error": f"table_index {table_index} out of range (1-{doc.Tables.Count})"})
+
+        table = doc.Tables(table_index)
+        op = operation.lower()
+
+        # get_info is read-only — no undo record needed
+        if op == "get_info":
+            result = table_com.get_info(table)
+            result["document"] = doc.Name
+            result["table_index"] = table_index
+            return json.dumps(result, ensure_ascii=False)
+
+        # All other operations are destructive
+        with undo_record(app, "MCP: Modify Table"):
+            prev_tracking = doc.TrackRevisions
+            prev_author = app.UserName
+            if track_changes:
+                doc.TrackRevisions = True
+                app.UserName = DEFAULT_AUTHOR
+
+            try:
+                if op == "set_cell":
+                    if row is None or col is None or text is None:
+                        return json.dumps({"error": "set_cell requires row, col, and text"})
+                    result = table_com.set_cell(table, row, col, text)
+
+                elif op == "add_column":
+                    result = table_com.add_column(table, before_col, header, cells)
+
+                elif op == "delete_column":
+                    if col is None:
+                        return json.dumps({"error": "delete_column requires col"})
+                    result = table_com.delete_column(table, col)
+
+                elif op == "add_row":
+                    result = table_com.add_row(table, before_row, cells)
+
+                elif op == "delete_row":
+                    if row is None:
+                        return json.dumps({"error": "delete_row requires row"})
+                    result = table_com.delete_row(table, row)
+
+                elif op == "merge_cells":
+                    if not all(v is not None for v in [start_row, start_col, end_row, end_col]):
+                        return json.dumps({"error": "merge_cells requires start_row, start_col, end_row, end_col"})
+                    result = table_com.merge_cells(table, start_row, start_col, end_row, end_col)
+
+                elif op == "autofit":
+                    result = table_com.autofit(table, autofit_mode)
+
+                else:
+                    return json.dumps({
+                        "error": f"Unknown operation '{op}'. Use: get_info, set_cell, "
+                        "add_column, delete_column, add_row, delete_row, merge_cells, autofit"
+                    })
+            finally:
+                if track_changes:
+                    doc.TrackRevisions = prev_tracking
+                    app.UserName = prev_author
+
+        result["success"] = True
+        result["document"] = doc.Name
+        result["table_index"] = table_index
+        result["operation"] = op
+        result["tracked"] = track_changes
+        return json.dumps(result, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 async def word_live_undo(
     filename: str = None,
     times: int = 1,

@@ -953,6 +953,38 @@ def register_tools():
 
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Word Live Modify Table",
+            destructiveHint=True,
+        ),
+        description=live_tools.word_live_modify_table.__doc__,
+    )
+    def word_live_modify_table(
+        filename: str = None,
+        table_index: int = 1,
+        operation: str = "get_info",
+        row: int = None,
+        col: int = None,
+        text: str = None,
+        before_row: int = None,
+        before_col: int = None,
+        header: str = None,
+        cells: list[str] = None,
+        start_row: int = None,
+        start_col: int = None,
+        end_row: int = None,
+        end_col: int = None,
+        autofit_mode: str = "content",
+        track_changes: bool = False,
+    ):
+        return live_tools.word_live_modify_table(
+            filename, table_index, operation, row, col, text,
+            before_row, before_col, header, cells,
+            start_row, start_col, end_row, end_col,
+            autofit_mode, track_changes,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Word Live Delete Text",
             destructiveHint=True,
         ),
