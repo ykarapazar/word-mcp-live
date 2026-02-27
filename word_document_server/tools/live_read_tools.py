@@ -356,13 +356,31 @@ async def word_live_get_comments(filename: str = None) -> str:
             except Exception:
                 pass
 
-            comments.append({
+            # Collect replies (Word 2016+)
+            replies = []
+            try:
+                for r_idx in range(1, c.Replies.Count + 1):
+                    r = c.Replies(r_idx)
+                    replies.append({
+                        "index": r.Index,
+                        "author": str(r.Author) if r.Author else "",
+                        "date": str(r.Date) if r.Date else "",
+                        "text": str(r.Range.Text) if r.Range and r.Range.Text else "",
+                    })
+            except Exception:
+                pass  # Replies not supported in older Word versions
+
+            comment_data = {
                 "index": i,
                 "author": str(c.Author) if c.Author else "",
                 "date": str(c.Date) if c.Date else "",
                 "text": str(c.Range.Text) if c.Range and c.Range.Text else "",
                 "scope": scope_text,
-            })
+            }
+            if replies:
+                comment_data["replies"] = replies
+                comment_data["reply_count"] = len(replies)
+            comments.append(comment_data)
 
         return json.dumps({
             "success": True,
@@ -440,6 +458,72 @@ async def word_live_add_comment(
             "comment_index": comment.Index,
             "author": author,
             "text": text[:100],
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_reply_to_comment(
+    filename: str = None,
+    comment_index: int = None,
+    text: str = "",
+    author: str = DEFAULT_AUTHOR,
+) -> str:
+    """Reply to an existing comment in an open Word document.
+
+    Adds a threaded reply to a top-level comment. Requires Word 2016 or later.
+    Use word_live_get_comments to find the comment_index.
+
+    Args:
+        filename: Document name or path (None = active document).
+        comment_index: 1-indexed comment to reply to.
+        text: Reply text.
+        author: Reply author name.
+
+    Returns:
+        JSON with reply info.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    if comment_index is None:
+        return json.dumps({"error": "comment_index is required"})
+    if not text:
+        return json.dumps({"error": "Reply text is required"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        if comment_index < 1 or comment_index > doc.Comments.Count:
+            return json.dumps({
+                "error": f"comment_index {comment_index} out of range (1-{doc.Comments.Count})"
+            })
+
+        comment = doc.Comments(comment_index)
+
+        with undo_record(app, "MCP: Reply to Comment"):
+            prev_author = app.UserName
+            app.UserName = author
+            try:
+                reply = comment.Replies.Add(comment.Scope, text)
+            except AttributeError:
+                return json.dumps({
+                    "error": "Comment replies require Word 2016 or later."
+                })
+            finally:
+                app.UserName = prev_author
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "comment_index": comment_index,
+            "reply_text": text[:100],
+            "reply_index": reply.Index,
+            "author": author,
         }, ensure_ascii=False)
 
     except Exception as e:

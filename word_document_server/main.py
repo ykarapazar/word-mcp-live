@@ -1154,6 +1154,25 @@ def register_tools():
 
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Word Live Reply to Comment",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_reply_to_comment(
+        filename: str = None,
+        comment_index: int = None,
+        text: str = "",
+        author: str = DEFAULT_AUTHOR,
+    ):
+        """[Windows only] Reply to an existing comment in a Word document open in Word.
+        Adds a threaded reply. Use word_live_get_comments to find the comment_index.
+        Requires Word 2016+ running."""
+        return live_read_tools.word_live_reply_to_comment(
+            filename, comment_index, text, author
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Word Live List Revisions",
             readOnlyHint=True,
         ),
