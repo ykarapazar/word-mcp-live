@@ -530,6 +530,111 @@ async def word_live_reply_to_comment(
         return json.dumps({"error": str(e)})
 
 
+async def word_live_resolve_comment(
+    filename: str = None,
+    comment_index: int = None,
+    resolve: bool = True,
+) -> str:
+    """Resolve or unresolve a comment in an open Word document.
+
+    Marks a comment thread as resolved (Done) or re-opens it.
+    Requires Word 2016 or later.
+
+    Args:
+        filename: Document name or path (None = active document).
+        comment_index: 1-indexed comment to resolve/unresolve.
+        resolve: True to resolve (mark done), False to unresolve (re-open).
+
+    Returns:
+        JSON with result info.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    if comment_index is None:
+        return json.dumps({"error": "comment_index is required"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        if comment_index < 1 or comment_index > doc.Comments.Count:
+            return json.dumps({
+                "error": f"comment_index {comment_index} out of range (1-{doc.Comments.Count})"
+            })
+
+        comment = doc.Comments(comment_index)
+
+        with undo_record(app, "MCP: Resolve Comment"):
+            try:
+                comment.Done = resolve
+            except AttributeError:
+                return json.dumps({
+                    "error": "Comment resolve/unresolve requires Word 2016 or later."
+                })
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "comment_index": comment_index,
+            "resolved": resolve,
+            "comment_text": str(comment.Range.Text)[:100] if comment.Range else "",
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_delete_comment(
+    filename: str = None,
+    comment_index: int = None,
+) -> str:
+    """Delete a comment from an open Word document.
+
+    Args:
+        filename: Document name or path (None = active document).
+        comment_index: 1-indexed comment to delete.
+
+    Returns:
+        JSON with result info.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    if comment_index is None:
+        return json.dumps({"error": "comment_index is required"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        if comment_index < 1 or comment_index > doc.Comments.Count:
+            return json.dumps({
+                "error": f"comment_index {comment_index} out of range (1-{doc.Comments.Count})"
+            })
+
+        comment = doc.Comments(comment_index)
+        comment_text = str(comment.Range.Text)[:100] if comment.Range else ""
+
+        with undo_record(app, "MCP: Delete Comment"):
+            comment.Delete()
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "deleted_comment_index": comment_index,
+            "deleted_comment_text": comment_text,
+            "remaining_comments": doc.Comments.Count,
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 async def word_live_list_revisions(filename: str = None) -> str:
     """List all tracked changes (revisions) in an open Word document.
 
