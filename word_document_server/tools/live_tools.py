@@ -1406,6 +1406,13 @@ async def word_live_insert_image(
     position: str = "end",
     width_inches: float = None,
     height_inches: float = None,
+    width_pt: float = None,
+    height_pt: float = None,
+    alignment: str = None,
+    wrapping: str = None,
+    border_style: str = None,
+    border_width_pt: float = None,
+    border_color: str = None,
     link_to_file: bool = False,
 ) -> str:
     """Insert an image into an open Word document.
@@ -1420,6 +1427,15 @@ async def word_live_insert_image(
         position: "start", "end", or character offset as string. Only used if paragraph_index is None.
         width_inches: Optional width in inches (aspect ratio maintained if only one dimension given).
         height_inches: Optional height in inches.
+        width_pt: Optional width in points (1 inch = 72 pt). Overrides width_inches if both given.
+        height_pt: Optional height in points. Overrides height_inches if both given.
+        alignment: Paragraph alignment for the image: "left", "center", "right". Default: unchanged.
+        wrapping: Text wrapping style: "inline" (default), "square", "tight", "behind",
+            "infront", "topbottom". Non-inline converts to a floating Shape.
+        border_style: Border style around the image: "single", "double", "dotted", "dashed",
+            "thick", "none". Default: no border.
+        border_width_pt: Border line width in points (e.g. 1.0, 2.0). Default: 1.0.
+        border_color: Border color as "#RRGGBB" hex string. Default: black (#000000).
         link_to_file: If True, links to the file instead of embedding it.
 
     Returns:
@@ -1462,32 +1478,155 @@ async def word_live_insert_image(
                 rng = doc.Range()
                 rng.Collapse(0)
 
+        # Resolve final size in points (pt params override inches params)
+        final_w = None
+        final_h = None
+        if width_pt is not None:
+            final_w = float(width_pt)
+        elif width_inches is not None:
+            final_w = float(width_inches) * 72.0
+        if height_pt is not None:
+            final_h = float(height_pt)
+        elif height_inches is not None:
+            final_h = float(height_inches) * 72.0
+
+        # Wrapping style constants (wdWrapType)
+        WRAP_STYLES = {
+            "inline": None,       # keep as InlineShape
+            "square": 0,          # wdWrapSquare
+            "tight": 1,           # wdWrapTight
+            "behind": 3,          # wdWrapBehind
+            "infront": 4,         # wdWrapFront
+            "topbottom": 2,       # wdWrapTopBottom
+        }
+        wrap_val = None
+        if wrapping is not None:
+            wrap_val = WRAP_STYLES.get(wrapping.lower())
+            if wrapping.lower() != "inline" and wrap_val is None:
+                return json.dumps({"error": f"Unknown wrapping: {wrapping}. Use: {list(WRAP_STYLES.keys())}"})
+
+        # Border style constants
+        BORDER_STYLES = {
+            "none": 0,     # wdLineStyleNone
+            "single": 1,   # wdLineStyleSingle
+            "double": 7,   # wdLineStyleDouble
+            "dotted": 3,   # wdLineStyleDot
+            "dashed": 2,   # wdLineStyleDash
+            "thick": 6,    # wdLineStyleThickThinSmallGap
+        }
+
+        # Alignment map
+        ALIGN_MAP = {"left": 0, "center": 1, "right": 2}
+
         with undo_record(app, "MCP: Insert Image"):
-            shape = rng.InlineShapes.AddPicture(
+            inline_shape = rng.InlineShapes.AddPicture(
                 FileName=abs_path,
                 LinkToFile=link_to_file,
                 SaveWithDocument=not link_to_file,
             )
 
-            # Resize if requested
-            if width_inches is not None and height_inches is not None:
-                shape.Width = int(width_inches * 72)   # points
-                shape.Height = int(height_inches * 72)
-            elif width_inches is not None:
-                original_ratio = shape.Height / shape.Width
-                shape.Width = int(width_inches * 72)
-                shape.Height = int(width_inches * 72 * original_ratio)
-            elif height_inches is not None:
-                original_ratio = shape.Width / shape.Height
-                shape.Height = int(height_inches * 72)
-                shape.Width = int(height_inches * 72 * original_ratio)
+            # Resize if requested (preserves aspect ratio if only one dimension given)
+            if final_w is not None and final_h is not None:
+                inline_shape.Width = final_w
+                inline_shape.Height = final_h
+            elif final_w is not None:
+                original_ratio = inline_shape.Height / inline_shape.Width
+                inline_shape.Width = final_w
+                inline_shape.Height = final_w * original_ratio
+            elif final_h is not None:
+                original_ratio = inline_shape.Width / inline_shape.Height
+                inline_shape.Height = final_h
+                inline_shape.Width = final_h * original_ratio
+
+            result_width = inline_shape.Width
+            result_height = inline_shape.Height
+            result_wrapping = "inline"
+
+            # Convert to floating Shape for non-inline wrapping
+            if wrap_val is not None:
+                float_shape = inline_shape.ConvertToShape()
+                float_shape.WrapFormat.Type = wrap_val
+                result_wrapping = wrapping.lower()
+                result_width = float_shape.Width
+                result_height = float_shape.Height
+
+                # Apply border to floating shape
+                if border_style is not None:
+                    b_style = BORDER_STYLES.get(border_style.lower())
+                    if b_style is None:
+                        return json.dumps({"error": f"Unknown border_style: {border_style}. Use: {list(BORDER_STYLES.keys())}"})
+                    b_width = float(border_width_pt) if border_width_pt else 1.0
+                    # Parse border color
+                    b_color = 0  # black
+                    if border_color:
+                        bc = border_color.lstrip("#")
+                        rr, gg, bb = int(bc[0:2], 16), int(bc[2:4], 16), int(bc[4:6], 16)
+                        b_color = bb * 65536 + gg * 256 + rr  # Word BGR
+                    line = float_shape.Line
+                    if b_style == 0:  # none
+                        line.Visible = False
+                    else:
+                        line.Visible = True
+                        DASH_MAP = {"single": 1, "double": 1, "dotted": 3, "dashed": 4, "thick": 1}
+                        line.DashStyle = DASH_MAP.get(border_style.lower(), 1)
+                        line.Weight = b_width
+                        line.ForeColor.RGB = b_color
+                        if border_style.lower() == "double":
+                            line.Style = 3  # msoLineThinThin
+
+                # Apply alignment for floating shape using relative positioning
+                if alignment is not None:
+                    al = alignment.lower()
+                    if al in ALIGN_MAP:
+                        # Use margin-relative positioning
+                        float_shape.RelativeHorizontalPosition = 0  # wdRelativeHorizontalPositionMargin
+                        float_shape.RelativeVerticalPosition = 2    # wdRelativeVerticalPositionParagraph
+                        page_setup = doc.PageSetup
+                        text_width = page_setup.PageWidth - page_setup.LeftMargin - page_setup.RightMargin
+                        if al == "left":
+                            float_shape.Left = 0
+                        elif al == "right":
+                            float_shape.Left = max(0, text_width - float_shape.Width)
+                        else:  # center
+                            float_shape.Left = max(0, (text_width - float_shape.Width) / 2)
+            else:
+                # Inline shape: apply border via inline shape borders
+                if border_style is not None:
+                    b_style = BORDER_STYLES.get(border_style.lower())
+                    if b_style is None:
+                        return json.dumps({"error": f"Unknown border_style: {border_style}. Use: {list(BORDER_STYLES.keys())}"})
+                    b_width = float(border_width_pt) if border_width_pt else 1.0
+                    b_color = 0  # black
+                    if border_color:
+                        bc = border_color.lstrip("#")
+                        rr, gg, bb = int(bc[0:2], 16), int(bc[2:4], 16), int(bc[4:6], 16)
+                        b_color = bb * 65536 + gg * 256 + rr
+                    # Apply to all 4 borders of inline shape
+                    for bid in [-1, -2, -3, -4]:  # top, left, bottom, right
+                        try:
+                            border = inline_shape.Borders(bid)
+                            border.LineStyle = b_style
+                            if b_style != 0:
+                                border.LineWidth = b_width
+                                border.Color = b_color
+                        except Exception:
+                            pass
+
+                # Apply alignment for inline shape (set paragraph alignment)
+                if alignment is not None:
+                    al = ALIGN_MAP.get(alignment.lower())
+                    if al is not None:
+                        inline_shape.Range.ParagraphFormat.Alignment = al
 
         return json.dumps({
             "success": True,
             "document": doc.Name,
             "image": os.path.basename(abs_path),
-            "width_pt": shape.Width,
-            "height_pt": shape.Height,
+            "width_pt": result_width,
+            "height_pt": result_height,
+            "alignment": alignment or "unchanged",
+            "wrapping": result_wrapping,
+            "border": border_style or "none",
             "linked": link_to_file,
         }, ensure_ascii=False)
 

@@ -94,7 +94,7 @@ def setup_logging(debug_mode):
 
 
 # Initialize FastMCP server
-mcp = FastMCP("Word Document Server")
+mcp = FastMCP("Word Document Server v1.3.0-jinqi")
 
 
 def register_tools():
@@ -1332,15 +1332,29 @@ def register_tools():
         position: str = "end",
         width_inches: float = None,
         height_inches: float = None,
+        width_pt: float = None,
+        height_pt: float = None,
+        alignment: str = None,
+        wrapping: str = None,
+        border_style: str = None,
+        border_width_pt: float = None,
+        border_color: str = None,
         link_to_file: bool = False,
     ):
         """[Windows only] Insert an image into a Word document open in Word.
         Supports PNG, JPG, BMP etc. Position by paragraph_index or start/end.
-        Optional width/height in inches (maintains aspect ratio if one given).
+        Size: width/height in inches or points (pt overrides inches). Aspect ratio maintained if one given.
+        alignment: "left", "center", "right".
+        wrapping: "inline" (default), "square", "tight", "behind", "infront", "topbottom".
+        border_style: "single", "double", "dotted", "dashed", "thick", "none".
+        border_width_pt: border line width in points (default 1.0).
+        border_color: border color as "#RRGGBB" (default black).
         Requires Word running."""
         return live_tools.word_live_insert_image(
             filename, image_path, paragraph_index, position,
-            width_inches, height_inches, link_to_file
+            width_inches, height_inches, width_pt, height_pt,
+            alignment, wrapping, border_style, border_width_pt,
+            border_color, link_to_file
         )
 
     @mcp.tool(
