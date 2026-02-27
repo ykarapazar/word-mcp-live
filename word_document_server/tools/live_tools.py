@@ -6,6 +6,7 @@ providing real-time editing capabilities with optional tracked changes.
 
 import json
 import os
+import re
 import sys
 
 from word_document_server.defaults import DEFAULT_AUTHOR
@@ -1848,6 +1849,182 @@ async def word_live_list_cross_reference_items(
             "ref_type": ref_type,
             "items": result,
             "count": len(result),
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def word_live_insert_equation(
+    filename: str = None,
+    equation: str = "",
+    paragraph_index: int = None,
+    position: str = "end",
+    display_mode: bool = False,
+):
+    """Insert a mathematical equation into a Word document using UnicodeMath syntax.
+
+    LaTeX-like commands (e.g. \\int, \\sum, \\alpha) are automatically converted to
+    Unicode math symbols before insertion, ensuring proper rendering.
+
+    Args:
+        filename: Document name (uses active document if None).
+        equation: Equation text in UnicodeMath syntax. Examples:
+            Simple: "x^2 + y^2 = z^2", "E = mc^2"
+            Fractions: "(a+b)/(c+d)"
+            Square root: "\\sqrt(x^2+y^2)"
+            Greek letters: "\\alpha + \\beta = \\gamma"
+            Integrals: "\\int_0^\\infty e^(-x^2) dx"
+            Summation: "\\sum_(i=1)^n i^2"
+            Matrix: "\\matrix(a&b@c&d)"
+            Taylor series: "f(x) = \\sum_(n=0)^\\infty (f^((n))(a))/(n!) (x-a)^n"
+        paragraph_index: Insert after this paragraph (1-based). None = use position.
+        position: "start" or "end" of document. Ignored if paragraph_index given.
+        display_mode: If True, equation is centered on its own line (display style).
+            If False, equation is inline with surrounding text.
+
+    Returns:
+        JSON with success status and equation details.
+    """
+    # LaTeX-like command to Unicode math symbol mapping.
+    # Word's COM OMaths.Add + BuildUp doesn't process autocorrect entries,
+    # so we must pre-convert commands like \int, \sum to their Unicode equivalents.
+    UNICODE_MATH = {
+        # Greek lowercase
+        r"\alpha": "\u03B1", r"\beta": "\u03B2", r"\gamma": "\u03B3",
+        r"\delta": "\u03B4", r"\epsilon": "\u03B5", r"\varepsilon": "\u03B5",
+        r"\zeta": "\u03B6", r"\eta": "\u03B7", r"\theta": "\u03B8",
+        r"\vartheta": "\u03D1", r"\iota": "\u03B9", r"\kappa": "\u03BA",
+        r"\lambda": "\u03BB", r"\mu": "\u03BC", r"\nu": "\u03BD",
+        r"\xi": "\u03BE", r"\pi": "\u03C0", r"\rho": "\u03C1",
+        r"\sigma": "\u03C3", r"\varsigma": "\u03C2", r"\tau": "\u03C4",
+        r"\upsilon": "\u03C5", r"\phi": "\u03C6", r"\varphi": "\u03D5",
+        r"\chi": "\u03C7", r"\psi": "\u03C8", r"\omega": "\u03C9",
+        # Greek uppercase
+        r"\Gamma": "\u0393", r"\Delta": "\u0394", r"\Theta": "\u0398",
+        r"\Lambda": "\u039B", r"\Xi": "\u039E", r"\Pi": "\u03A0",
+        r"\Sigma": "\u03A3", r"\Upsilon": "\u03A5", r"\Phi": "\u03A6",
+        r"\Psi": "\u03A8", r"\Omega": "\u03A9",
+        # Operators / big operators
+        r"\int": "\u222B", r"\iint": "\u222C", r"\iiint": "\u222D",
+        r"\oint": "\u222E", r"\sum": "\u2211", r"\prod": "\u220F",
+        r"\coprod": "\u2210",
+        # Roots and radicals
+        r"\sqrt": "\u221A", r"\cbrt": "\u221B",
+        # Calculus / analysis
+        r"\partial": "\u2202", r"\nabla": "\u2207",
+        r"\infty": "\u221E",
+        # Logic / set theory
+        r"\forall": "\u2200", r"\exists": "\u2203", r"\nexists": "\u2204",
+        r"\in": "\u2208", r"\notin": "\u2209",
+        r"\subset": "\u2282", r"\supset": "\u2283",
+        r"\subseteq": "\u2286", r"\supseteq": "\u2287",
+        r"\cup": "\u222A", r"\cap": "\u2229",
+        r"\emptyset": "\u2205",
+        r"\neg": "\u00AC", r"\land": "\u2227", r"\lor": "\u2228",
+        # Arithmetic / relations
+        r"\pm": "\u00B1", r"\mp": "\u2213",
+        r"\times": "\u00D7", r"\div": "\u00F7", r"\cdot": "\u22C5",
+        r"\leq": "\u2264", r"\geq": "\u2265", r"\neq": "\u2260",
+        r"\approx": "\u2248", r"\equiv": "\u2261", r"\cong": "\u2245",
+        r"\sim": "\u223C", r"\propto": "\u221D",
+        r"\ll": "\u226A", r"\gg": "\u226B",
+        # Arrows
+        r"\rightarrow": "\u2192", r"\leftarrow": "\u2190",
+        r"\leftrightarrow": "\u2194",
+        r"\Rightarrow": "\u21D2", r"\Leftarrow": "\u21D0",
+        r"\Leftrightarrow": "\u21D4",
+        r"\uparrow": "\u2191", r"\downarrow": "\u2193",
+        r"\mapsto": "\u21A6",
+        # Dots
+        r"\cdots": "\u22EF", r"\ldots": "\u2026", r"\vdots": "\u22EE",
+        r"\ddots": "\u22F1",
+        # Miscellaneous
+        r"\angle": "\u2220", r"\degree": "\u00B0",
+        r"\star": "\u22C6", r"\circ": "\u2218",
+        r"\bullet": "\u2022", r"\diamond": "\u22C4",
+        r"\triangle": "\u25B3",
+        r"\hbar": "\u210F", r"\ell": "\u2113",
+        r"\Re": "\u211C", r"\Im": "\u2124",
+        r"\aleph": "\u2135",
+        # Matrix (Word UnicodeMath uses ■ for matrix)
+        r"\matrix": "\u25A0", r"\pmatrix": "\u25A0",
+        # Function names (these stay as text but without backslash)
+        r"\lim": "lim", r"\sin": "sin", r"\cos": "cos", r"\tan": "tan",
+        r"\sec": "sec", r"\csc": "csc", r"\cot": "cot",
+        r"\arcsin": "arcsin", r"\arccos": "arccos", r"\arctan": "arctan",
+        r"\sinh": "sinh", r"\cosh": "cosh", r"\tanh": "tanh",
+        r"\log": "log", r"\ln": "ln", r"\exp": "exp",
+        r"\det": "det", r"\dim": "dim", r"\ker": "ker",
+        r"\min": "min", r"\max": "max", r"\inf": "inf", r"\sup": "sup",
+        r"\gcd": "gcd", r"\arg": "arg", r"\mod": "mod",
+    }
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        if not equation or not equation.strip():
+            return json.dumps({"error": "equation text is required"})
+
+        with undo_record(app, "MCP: Insert Equation"):
+            # Determine insertion range
+            if paragraph_index is not None:
+                if paragraph_index < 1 or paragraph_index > doc.Paragraphs.Count:
+                    return json.dumps({
+                        "error": f"paragraph_index {paragraph_index} out of range (1-{doc.Paragraphs.Count})"
+                    })
+                rng = doc.Paragraphs(paragraph_index).Range
+                rng.Collapse(0)  # After the paragraph
+                rng.InsertParagraphAfter()
+                rng.Collapse(0)
+            elif position == "start":
+                rng = doc.Paragraphs(1).Range
+                rng.Collapse(1)  # Before first paragraph
+                rng.InsertParagraphBefore()
+                rng = doc.Paragraphs(1).Range
+                rng.Collapse(1)
+            else:  # "end"
+                rng = doc.Content
+                rng.Collapse(0)  # After last content
+                rng.InsertParagraphAfter()
+                rng.Collapse(0)
+
+            # Convert LaTeX-like commands to Unicode math symbols.
+            # Sort by length descending so longer matches take priority
+            # (e.g. \iint before \int, \infty before \in).
+            # Use negative lookahead (?![a-zA-Z]) to avoid partial matches.
+            _commands = sorted(UNICODE_MATH.keys(), key=len, reverse=True)
+            _pattern = '|'.join(re.escape(c) for c in _commands)
+            _pattern = f'({_pattern})(?![a-zA-Z])'
+            eq_text = re.sub(_pattern, lambda m: UNICODE_MATH[m.group(1)], equation)
+
+            # Insert the converted equation text
+            rng.Text = eq_text
+
+            # Convert to OMath
+            doc.OMaths.Add(rng)
+            omath = doc.OMaths(doc.OMaths.Count)
+
+            # Set display mode (centered on own line) vs inline
+            if display_mode:
+                omath.Type = 1  # wdOMathDisplay
+            else:
+                omath.Type = 0  # wdOMathInline
+
+            # Build up the equation (render UnicodeMath to formatted equation)
+            omath.BuildUp()
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "equation": equation,
+            "display_mode": display_mode,
+            "omath_count": doc.OMaths.Count,
         }, ensure_ascii=False)
 
     except Exception as e:

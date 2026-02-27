@@ -1400,6 +1400,29 @@ def register_tools():
 
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Word Live Insert Equation",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_insert_equation(
+        filename: str = None,
+        equation: str = "",
+        paragraph_index: int = None,
+        position: str = "end",
+        display_mode: bool = False,
+    ):
+        """[Windows only] Insert a mathematical equation into a Word document using UnicodeMath syntax.
+        Examples: "x^2 + y^2 = z^2", "(a+b)/(c+d)" (fraction), "\\sqrt(x^2+y^2)" (root),
+        "\\alpha + \\beta" (Greek), "\\int_0^\\infty e^(-x^2) dx" (integral),
+        "\\sum_(i=1)^n i^2" (summation), "\\matrix(a&b@c&d)" (matrix).
+        display_mode=True centers the equation on its own line.
+        Requires Word running."""
+        return live_tools.word_live_insert_equation(
+            filename, equation, paragraph_index, position, display_mode
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Word Live Diagnose Layout",
             readOnlyHint=True,
         ),
