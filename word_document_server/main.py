@@ -1157,6 +1157,60 @@ def register_tools():
 
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Word Live Reply to Comment",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_reply_to_comment(
+        filename: str = None,
+        comment_index: int = None,
+        text: str = "",
+        author: str = DEFAULT_AUTHOR,
+    ):
+        """[Windows only] Reply to an existing comment in a Word document open in Word.
+        Adds a threaded reply. Use word_live_get_comments to find the comment_index.
+        Requires Word 2016+ running."""
+        return live_read_tools.word_live_reply_to_comment(
+            filename, comment_index, text, author
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Resolve Comment",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_resolve_comment(
+        filename: str = None,
+        comment_index: int = None,
+        resolve: bool = True,
+    ):
+        """[Windows only] Resolve or unresolve a comment in a Word document open in Word.
+        Sets the comment's Done property. Use word_live_get_comments to find comment_index.
+        Requires Word 2016+ running."""
+        return live_read_tools.word_live_resolve_comment(
+            filename, comment_index, resolve
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Delete Comment",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_delete_comment(
+        filename: str = None,
+        comment_index: int = None,
+    ):
+        """[Windows only] Delete a comment from a Word document open in Word.
+        Permanently removes the comment. Use word_live_get_comments to find comment_index.
+        Requires Word running."""
+        return live_read_tools.word_live_delete_comment(
+            filename, comment_index
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Word Live List Revisions",
             readOnlyHint=True,
         ),
@@ -1239,6 +1293,128 @@ def register_tools():
         """[Windows only] Undo the last N operations in a Word document open in Word.
         Each MCP tool call is one undo entry. Requires Word running."""
         return live_tools.word_live_undo(filename, times)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Save",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_save(
+        filename: str = None,
+        save_as: str = None,
+    ):
+        """[Windows only] Save a Word document open in Word.
+        Optionally save to a new path with save_as. Requires Word running."""
+        return live_tools.word_live_save(filename, save_as)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Toggle Track Changes",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_toggle_track_changes(
+        filename: str = None,
+        enable: bool = None,
+    ):
+        """[Windows only] Toggle or set Track Changes mode on a Word document.
+        If enable is omitted, toggles current state. Requires Word running."""
+        return live_tools.word_live_toggle_track_changes(filename, enable)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Insert Image",
+            destructiveHint=True,
+        ),
+        description=live_tools.word_live_insert_image.__doc__,
+    )
+    def word_live_insert_image(
+        filename: str = None,
+        image_path: str = "",
+        paragraph_index: int = None,
+        position: str = "end",
+        width_inches: float = None,
+        height_inches: float = None,
+        width_pt: float = None,
+        height_pt: float = None,
+        alignment: str = None,
+        wrapping: str = None,
+        border_style: str = None,
+        border_width_pt: float = None,
+        border_color: str = None,
+        link_to_file: bool = False,
+    ):
+        return live_tools.word_live_insert_image(
+            filename, image_path, paragraph_index, position,
+            width_inches, height_inches, width_pt, height_pt,
+            alignment, wrapping, border_style, border_width_pt,
+            border_color, link_to_file
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Insert Cross Reference",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_insert_cross_reference(
+        filename: str = None,
+        ref_type: str = "heading",
+        ref_item: int = 1,
+        ref_kind: str = "text",
+        insert_position: str = "end",
+        paragraph_index: int = None,
+        insert_as_hyperlink: bool = True,
+    ):
+        """[Windows only] Insert a cross-reference to a heading, bookmark, figure, table, etc.
+        First use word_live_list_cross_reference_items to discover available targets.
+        ref_type: heading, bookmark, figure, table, equation, footnote, endnote.
+        ref_kind: text, number, number_no_context, page, above_below.
+        Requires Word running."""
+        return live_tools.word_live_insert_cross_reference(
+            filename, ref_type, ref_item, ref_kind,
+            insert_position, paragraph_index, insert_as_hyperlink
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live List Cross Reference Items",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_list_cross_reference_items(
+        filename: str = None,
+        ref_type: str = "heading",
+    ):
+        """[Windows only] List available cross-reference targets in a Word document.
+        Returns items that can be referenced with word_live_insert_cross_reference.
+        ref_type: heading, bookmark, figure, table, equation, footnote, endnote.
+        Requires Word running."""
+        return live_tools.word_live_list_cross_reference_items(filename, ref_type)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Insert Equation",
+            destructiveHint=True,
+        ),
+    )
+    def word_live_insert_equation(
+        filename: str = None,
+        equation: str = "",
+        paragraph_index: int = None,
+        position: str = "end",
+        display_mode: bool = False,
+    ):
+        """[Windows only] Insert a mathematical equation into a Word document using UnicodeMath syntax.
+        Examples: "x^2 + y^2 = z^2", "(a+b)/(c+d)" (fraction), "\\sqrt(x^2+y^2)" (root),
+        "\\alpha + \\beta" (Greek), "\\int_0^\\infty e^(-x^2) dx" (integral),
+        "\\sum_(i=1)^n i^2" (summation), "\\matrix(a&b@c&d)" (matrix).
+        display_mode=True centers the equation on its own line.
+        Requires Word running."""
+        return live_tools.word_live_insert_equation(
+            filename, equation, paragraph_index, position, display_mode
+        )
 
     @mcp.tool(
         annotations=ToolAnnotations(
