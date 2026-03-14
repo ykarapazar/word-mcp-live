@@ -1149,7 +1149,7 @@ def register_tools():
         ),
     )
     def word_live_get_text(filename: str = None):
-        """[Windows only] Get all text from a Word document open in Word, paragraph by paragraph. Requires Word running."""
+        """[Windows only] Get all text from a Word document open in Word, paragraph by paragraph. For large documents (200+ paragraphs), automatically returns only the first 3 pages — use word_live_get_page_text to read specific pages."""
         return live_read_tools.word_live_get_text(filename)
 
     @mcp.tool(
@@ -1178,6 +1178,16 @@ def register_tools():
     def word_live_get_info(filename: str = None):
         """[Windows only] Get document info (pages, words, sections, etc.) from a Word document open in Word. Requires Word running."""
         return live_read_tools.word_live_get_info(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live List Open",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_list_open():
+        """[Windows only] List all documents currently open in Word with name, path, pages, and saved status."""
+        return live_read_tools.word_live_list_open()
 
     @mcp.tool(
         annotations=ToolAnnotations(

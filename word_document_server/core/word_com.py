@@ -6,6 +6,7 @@ Only works on Windows with pywin32 installed.
 
 import os
 import sys
+import unicodedata
 from contextlib import contextmanager
 
 
@@ -127,16 +128,17 @@ def find_document(app, filename: str = None):
     if not filename:
         return app.ActiveDocument
 
-    target_basename = os.path.basename(filename).lower()
+    target_basename = unicodedata.normalize('NFC', os.path.basename(filename)).lower()
     target_fullpath = (
-        os.path.normpath(filename).lower() if os.path.isabs(filename) else None
+        unicodedata.normalize('NFC', os.path.normpath(filename)).lower()
+        if os.path.isabs(filename) else None
     )
 
     for i in range(1, app.Documents.Count + 1):
         doc = app.Documents(i)
-        if doc.Name.lower() == target_basename:
+        if unicodedata.normalize('NFC', doc.Name).lower() == target_basename:
             return doc
-        if target_fullpath and os.path.normpath(doc.FullName).lower() == target_fullpath:
+        if target_fullpath and unicodedata.normalize('NFC', os.path.normpath(doc.FullName)).lower() == target_fullpath:
             return doc
 
     open_docs = [app.Documents(i).Name for i in range(1, app.Documents.Count + 1)]

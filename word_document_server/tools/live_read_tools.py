@@ -14,6 +14,10 @@ from word_document_server.defaults import DEFAULT_AUTHOR
 async def word_live_get_text(filename: str = None) -> str:
     """Get all text from an open Word document, paragraph by paragraph.
 
+    For documents with more than 200 paragraphs, only the first 3 pages are
+    returned along with total page count. Use word_live_get_page_text to read
+    specific pages of large documents.
+
     Args:
         filename: Document name or path (None = active document).
 
@@ -29,8 +33,24 @@ async def word_live_get_text(filename: str = None) -> str:
         app = get_word_app()
         doc = find_document(app, filename)
 
+        total_paras = doc.Paragraphs.Count
+
+        # Large document safety cap: return first 3 pages instead of all
+        if total_paras > 200:
+            total_pages = doc.ComputeStatistics(2)  # wdStatisticPages
+            result = json.loads(await word_live_get_page_text(filename, 1, 3))
+            result["truncated"] = True
+            result["total_paragraphs"] = total_paras
+            result["total_pages"] = total_pages
+            result["message"] = (
+                f"Document has {total_paras} paragraphs across {total_pages} pages. "
+                f"Showing first 3 pages only. Use word_live_get_page_text(page=N, end_page=M) "
+                f"to read specific pages."
+            )
+            return json.dumps(result, ensure_ascii=False)
+
         paragraphs = []
-        for i in range(1, doc.Paragraphs.Count + 1):
+        for i in range(1, total_paras + 1):
             text = doc.Paragraphs(i).Range.Text.rstrip("\r\x07")
             paragraphs.append({"index": i, "text": text})
 
@@ -1136,6 +1156,46 @@ async def word_live_diagnose_layout(
             "issues": issues,
             "issue_count": len(issues),
             "style_summary": style_counts,
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_list_open() -> str:
+    """[Windows only] List all documents currently open in Microsoft Word.
+
+    Returns JSON with list of open documents including name, full_path,
+    pages, saved status, and whether it is the active document.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app
+
+        app = get_word_app()
+        active_fullname = app.ActiveDocument.FullName if app.Documents.Count > 0 else None
+
+        documents = []
+        for i in range(1, app.Documents.Count + 1):
+            doc = app.Documents(i)
+            try:
+                pages = doc.ComputeStatistics(2)  # wdStatisticPages
+            except Exception:
+                pages = None
+            documents.append({
+                "name": doc.Name,
+                "full_path": doc.FullName,
+                "pages": pages,
+                "saved": doc.Saved,
+                "active": doc.FullName == active_fullname,
+            })
+
+        return json.dumps({
+            "success": True,
+            "count": len(documents),
+            "documents": documents,
         }, ensure_ascii=False)
 
     except Exception as e:
