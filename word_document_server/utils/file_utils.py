@@ -1,9 +1,26 @@
 """
 File utility functions for Word Document Server.
 """
+import asyncio
 import os
+import sys
 from typing import Tuple, Optional
 import shutil
+
+# Per-file locks to prevent concurrent read-modify-write on the same document
+_file_locks: dict[str, asyncio.Lock] = {}
+
+
+def get_file_lock(filepath: str) -> asyncio.Lock:
+    """Get or create an asyncio.Lock for a given file path.
+
+    Serializes concurrent async operations on the same document.
+    Different files can proceed in parallel.
+    """
+    path = os.path.realpath(filepath)
+    if sys.platform == "win32":
+        path = path.casefold()
+    return _file_locks.setdefault(path, asyncio.Lock())
 
 
 def check_file_writeable(filepath: str) -> Tuple[bool, str]:

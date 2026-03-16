@@ -11,7 +11,7 @@ from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_COLOR_INDEX
 from docx.enum.style import WD_STYLE_TYPE
 
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
+from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, get_file_lock
 from word_document_server.core.styles import create_style
 from word_document_server.core.tables import (
     apply_table_style, set_cell_shading_by_position, apply_alternating_row_shading,
@@ -64,72 +64,73 @@ async def format_text(filename: str, paragraph_index: int, start_pos: int, end_p
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate paragraph index
-        if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
-            return f"Invalid paragraph index. Document has {len(doc.paragraphs)} paragraphs (0-{len(doc.paragraphs)-1})."
-        
-        paragraph = doc.paragraphs[paragraph_index]
-        text = paragraph.text
-        
-        # Validate text positions
-        if start_pos < 0 or end_pos > len(text) or start_pos >= end_pos:
-            return f"Invalid text positions. Paragraph has {len(text)} characters."
-        
-        # Get the text to format
-        target_text = text[start_pos:end_pos]
-        
-        # Clear existing runs and create three runs: before, target, after
-        for run in paragraph.runs:
-            run.clear()
-        
-        # Add text before target
-        if start_pos > 0:
-            run_before = paragraph.add_run(text[:start_pos])
-        
-        # Add target text with formatting
-        run_target = paragraph.add_run(target_text)
-        if bold is not None:
-            run_target.bold = bold
-        if italic is not None:
-            run_target.italic = italic
-        if underline is not None:
-            run_target.underline = underline
-        if color:
-            # Define common RGB colors
-            color_map = {
-                'red': RGBColor(255, 0, 0),
-                'blue': RGBColor(0, 0, 255),
-                'green': RGBColor(0, 128, 0),
-                'yellow': RGBColor(255, 255, 0),
-                'black': RGBColor(0, 0, 0),
-                'gray': RGBColor(128, 128, 128),
-                'white': RGBColor(255, 255, 255),
-                'purple': RGBColor(128, 0, 128),
-                'orange': RGBColor(255, 165, 0)
-            }
-            
-            try:
-                if color.lower() in color_map:
-                    # Use predefined RGB color
-                    run_target.font.color.rgb = color_map[color.lower()]
-                else:
-                    # Try to set color by name
-                    run_target.font.color.rgb = RGBColor.from_string(color)
-            except Exception as e:
-                # If all else fails, default to black
-                run_target.font.color.rgb = RGBColor(0, 0, 0)
-        if font_size:
-            run_target.font.size = Pt(font_size)
-        if font_name:
-            run_target.font.name = font_name
-        
-        # Add text after target
-        if end_pos < len(text):
-            run_after = paragraph.add_run(text[end_pos:])
-        
-        doc.save(filename)
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate paragraph index
+            if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
+                return f"Invalid paragraph index. Document has {len(doc.paragraphs)} paragraphs (0-{len(doc.paragraphs)-1})."
+
+            paragraph = doc.paragraphs[paragraph_index]
+            text = paragraph.text
+
+            # Validate text positions
+            if start_pos < 0 or end_pos > len(text) or start_pos >= end_pos:
+                return f"Invalid text positions. Paragraph has {len(text)} characters."
+
+            # Get the text to format
+            target_text = text[start_pos:end_pos]
+
+            # Clear existing runs and create three runs: before, target, after
+            for run in paragraph.runs:
+                run.clear()
+
+            # Add text before target
+            if start_pos > 0:
+                run_before = paragraph.add_run(text[:start_pos])
+
+            # Add target text with formatting
+            run_target = paragraph.add_run(target_text)
+            if bold is not None:
+                run_target.bold = bold
+            if italic is not None:
+                run_target.italic = italic
+            if underline is not None:
+                run_target.underline = underline
+            if color:
+                # Define common RGB colors
+                color_map = {
+                    'red': RGBColor(255, 0, 0),
+                    'blue': RGBColor(0, 0, 255),
+                    'green': RGBColor(0, 128, 0),
+                    'yellow': RGBColor(255, 255, 0),
+                    'black': RGBColor(0, 0, 0),
+                    'gray': RGBColor(128, 128, 128),
+                    'white': RGBColor(255, 255, 255),
+                    'purple': RGBColor(128, 0, 128),
+                    'orange': RGBColor(255, 165, 0)
+                }
+
+                try:
+                    if color.lower() in color_map:
+                        # Use predefined RGB color
+                        run_target.font.color.rgb = color_map[color.lower()]
+                    else:
+                        # Try to set color by name
+                        run_target.font.color.rgb = RGBColor.from_string(color)
+                except Exception as e:
+                    # If all else fails, default to black
+                    run_target.font.color.rgb = RGBColor(0, 0, 0)
+            if font_size:
+                run_target.font.size = Pt(font_size)
+            if font_name:
+                run_target.font.name = font_name
+
+            # Add text after target
+            if end_pos < len(text):
+                run_after = paragraph.add_run(text[end_pos:])
+
+            doc.save(filename)
         return f"Text '{target_text}' formatted successfully in paragraph {paragraph_index}."
     except Exception as e:
         return f"Failed to format text: {str(e)}"
@@ -162,31 +163,32 @@ async def create_custom_style(filename: str, style_name: str,
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Build font properties dictionary
-        font_properties = {}
-        if bold is not None:
-            font_properties['bold'] = bold
-        if italic is not None:
-            font_properties['italic'] = italic
-        if font_size is not None:
-            font_properties['size'] = font_size
-        if font_name is not None:
-            font_properties['name'] = font_name
-        if color is not None:
-            font_properties['color'] = color
-        
-        # Create the style
-        new_style = create_style(
-            doc, 
-            style_name, 
-            WD_STYLE_TYPE.PARAGRAPH, 
-            base_style=base_style,
-            font_properties=font_properties
-        )
-        
-        doc.save(filename)
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Build font properties dictionary
+            font_properties = {}
+            if bold is not None:
+                font_properties['bold'] = bold
+            if italic is not None:
+                font_properties['italic'] = italic
+            if font_size is not None:
+                font_properties['size'] = font_size
+            if font_name is not None:
+                font_properties['name'] = font_name
+            if color is not None:
+                font_properties['color'] = color
+
+            # Create the style
+            new_style = create_style(
+                doc,
+                style_name,
+                WD_STYLE_TYPE.PARAGRAPH,
+                base_style=base_style,
+                font_properties=font_properties
+            )
+
+            doc.save(filename)
         return f"Style '{style_name}' created successfully."
     except Exception as e:
         return f"Failed to create style: {str(e)}"
@@ -216,22 +218,23 @@ async def format_table(filename: str, table_index: int,
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Apply formatting
-        success = apply_table_style(table, has_header_row or False, border_style, shading)
-        
-        if success:
-            doc.save(filename)
-            return f"Table at index {table_index} formatted successfully."
-        else:
-            return f"Failed to format table at index {table_index}."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Apply formatting
+            success = apply_table_style(table, has_header_row or False, border_style, shading)
+
+            if success:
+                doc.save(filename)
+                return f"Table at index {table_index} formatted successfully."
+            else:
+                return f"Failed to format table at index {table_index}."
     except Exception as e:
         return f"Failed to format table: {str(e)}"
 
@@ -267,29 +270,30 @@ async def set_table_cell_shading(filename: str, table_index: int, row_index: int
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Validate row and column indices
-        if row_index < 0 or row_index >= len(table.rows):
-            return f"Invalid row index. Table has {len(table.rows)} rows (0-{len(table.rows)-1})."
-        
-        if col_index < 0 or col_index >= len(table.rows[row_index].cells):
-            return f"Invalid column index. Row has {len(table.rows[row_index].cells)} cells (0-{len(table.rows[row_index].cells)-1})."
-        
-        # Apply cell shading
-        success = set_cell_shading_by_position(table, row_index, col_index, fill_color, pattern)
-        
-        if success:
-            doc.save(filename)
-            return f"Cell shading applied successfully to table {table_index}, row {row_index}, column {col_index}."
-        else:
-            return f"Failed to apply cell shading."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Validate row and column indices
+            if row_index < 0 or row_index >= len(table.rows):
+                return f"Invalid row index. Table has {len(table.rows)} rows (0-{len(table.rows)-1})."
+
+            if col_index < 0 or col_index >= len(table.rows[row_index].cells):
+                return f"Invalid column index. Row has {len(table.rows[row_index].cells)} cells (0-{len(table.rows[row_index].cells)-1})."
+
+            # Apply cell shading
+            success = set_cell_shading_by_position(table, row_index, col_index, fill_color, pattern)
+
+            if success:
+                doc.save(filename)
+                return f"Cell shading applied successfully to table {table_index}, row {row_index}, column {col_index}."
+            else:
+                return f"Failed to apply cell shading."
     except Exception as e:
         return f"Failed to apply cell shading: {str(e)}"
 
@@ -321,22 +325,23 @@ async def apply_table_alternating_rows(filename: str, table_index: int,
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Apply alternating row shading
-        success = apply_alternating_row_shading(table, color1, color2)
-        
-        if success:
-            doc.save(filename)
-            return f"Alternating row shading applied successfully to table {table_index}."
-        else:
-            return f"Failed to apply alternating row shading."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Apply alternating row shading
+            success = apply_alternating_row_shading(table, color1, color2)
+
+            if success:
+                doc.save(filename)
+                return f"Alternating row shading applied successfully to table {table_index}."
+            else:
+                return f"Failed to apply alternating row shading."
     except Exception as e:
         return f"Failed to apply alternating row shading: {str(e)}"
 
@@ -368,22 +373,23 @@ async def highlight_table_header(filename: str, table_index: int,
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Apply header highlighting
-        success = highlight_header_row(table, header_color, text_color)
-        
-        if success:
-            doc.save(filename)
-            return f"Header highlighting applied successfully to table {table_index}."
-        else:
-            return f"Failed to apply header highlighting."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Apply header highlighting
+            success = highlight_header_row(table, header_color, text_color)
+
+            if success:
+                doc.save(filename)
+                return f"Header highlighting applied successfully to table {table_index}."
+            else:
+                return f"Failed to apply header highlighting."
     except Exception as e:
         return f"Failed to apply header highlighting: {str(e)}"
 
@@ -421,29 +427,30 @@ async def merge_table_cells(filename: str, table_index: int, start_row: int, sta
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Validate merge parameters
-        if start_row > end_row or start_col > end_col:
-            return "Invalid merge range: start indices must be <= end indices"
-        
-        if start_row == end_row and start_col == end_col:
-            return "Invalid merge range: cannot merge a single cell with itself"
-        
-        # Apply cell merge
-        success = merge_cells(table, start_row, start_col, end_row, end_col)
-        
-        if success:
-            doc.save(filename)
-            return f"Cells merged successfully in table {table_index} from ({start_row},{start_col}) to ({end_row},{end_col})."
-        else:
-            return f"Failed to merge cells. Check that indices are valid."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Validate merge parameters
+            if start_row > end_row or start_col > end_col:
+                return "Invalid merge range: start indices must be <= end indices"
+
+            if start_row == end_row and start_col == end_col:
+                return "Invalid merge range: cannot merge a single cell with itself"
+
+            # Apply cell merge
+            success = merge_cells(table, start_row, start_col, end_row, end_col)
+
+            if success:
+                doc.save(filename)
+                return f"Cells merged successfully in table {table_index} from ({start_row},{start_col}) to ({end_row},{end_col})."
+            else:
+                return f"Failed to merge cells. Check that indices are valid."
     except Exception as e:
         return f"Failed to merge cells: {str(e)}"
 
@@ -479,22 +486,23 @@ async def merge_table_cells_horizontal(filename: str, table_index: int, row_inde
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Apply horizontal cell merge
-        success = merge_cells_horizontal(table, row_index, start_col, end_col)
-        
-        if success:
-            doc.save(filename)
-            return f"Cells merged horizontally in table {table_index}, row {row_index}, columns {start_col}-{end_col}."
-        else:
-            return f"Failed to merge cells horizontally. Check that indices are valid."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Apply horizontal cell merge
+            success = merge_cells_horizontal(table, row_index, start_col, end_col)
+
+            if success:
+                doc.save(filename)
+                return f"Cells merged horizontally in table {table_index}, row {row_index}, columns {start_col}-{end_col}."
+            else:
+                return f"Failed to merge cells horizontally. Check that indices are valid."
     except Exception as e:
         return f"Failed to merge cells horizontally: {str(e)}"
 
@@ -530,22 +538,23 @@ async def merge_table_cells_vertical(filename: str, table_index: int, col_index:
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Apply vertical cell merge
-        success = merge_cells_vertical(table, col_index, start_row, end_row)
-        
-        if success:
-            doc.save(filename)
-            return f"Cells merged vertically in table {table_index}, column {col_index}, rows {start_row}-{end_row}."
-        else:
-            return f"Failed to merge cells vertically. Check that indices are valid."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Apply vertical cell merge
+            success = merge_cells_vertical(table, col_index, start_row, end_row)
+
+            if success:
+                doc.save(filename)
+                return f"Cells merged vertically in table {table_index}, column {col_index}, rows {start_row}-{end_row}."
+            else:
+                return f"Failed to merge cells vertically. Check that indices are valid."
     except Exception as e:
         return f"Failed to merge cells vertically: {str(e)}"
 
@@ -591,22 +600,23 @@ async def set_table_cell_alignment(filename: str, table_index: int, row_index: i
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Apply cell alignment
-        success = set_cell_alignment_by_position(table, row_index, col_index, horizontal, vertical)
-        
-        if success:
-            doc.save(filename)
-            return f"Cell alignment set successfully for table {table_index}, cell ({row_index},{col_index}) to {horizontal}/{vertical}."
-        else:
-            return f"Failed to set cell alignment. Check that indices are valid."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Apply cell alignment
+            success = set_cell_alignment_by_position(table, row_index, col_index, horizontal, vertical)
+
+            if success:
+                doc.save(filename)
+                return f"Cell alignment set successfully for table {table_index}, cell ({row_index},{col_index}) to {horizontal}/{vertical}."
+            else:
+                return f"Failed to set cell alignment. Check that indices are valid."
     except Exception as e:
         return f"Failed to set cell alignment: {str(e)}"
 
@@ -648,22 +658,23 @@ async def set_table_alignment_all(filename: str, table_index: int,
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Apply table alignment
-        success = set_table_alignment(table, horizontal, vertical)
-        
-        if success:
-            doc.save(filename)
-            return f"Table alignment set successfully for table {table_index} to {horizontal}/{vertical} for all cells."
-        else:
-            return f"Failed to set table alignment."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Apply table alignment
+            success = set_table_alignment(table, horizontal, vertical)
+
+            if success:
+                doc.save(filename)
+                return f"Table alignment set successfully for table {table_index} to {horizontal}/{vertical} for all cells."
+            else:
+                return f"Failed to set table alignment."
     except Exception as e:
         return f"Failed to set table alignment: {str(e)}"
 
@@ -704,47 +715,48 @@ async def set_table_column_width(filename: str, table_index: int, col_index: int
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Validate column index
-        if col_index < 0 or col_index >= len(table.columns):
-            return f"Invalid column index. Table has {len(table.columns)} columns (0-{len(table.columns)-1})."
-        
-        # Convert width and type for Word format
-        if width_type.lower() == "points":
-            # Points to DXA (twentieths of a point)
-            word_width = width
-            word_type = "dxa"
-        elif width_type.lower() == "inches":
-            # Inches to points, then to DXA
-            word_width = width * 72  # 72 points per inch
-            word_type = "dxa"
-        elif width_type.lower() == "cm":
-            # CM to points, then to DXA
-            word_width = width * 28.35  # ~28.35 points per cm
-            word_type = "dxa"
-        elif width_type.lower() == "percent":
-            # Percentage (Word uses 50x the percentage value)
-            word_width = width
-            word_type = "pct"
-        else:  # auto
-            word_width = 0
-            word_type = "auto"
-        
-        # Apply column width
-        success = set_column_width_by_position(table, col_index, word_width, word_type)
-        
-        if success:
-            doc.save(filename)
-            return f"Column width set successfully for table {table_index}, column {col_index} to {width} {width_type}."
-        else:
-            return f"Failed to set column width. Check that indices are valid."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Validate column index
+            if col_index < 0 or col_index >= len(table.columns):
+                return f"Invalid column index. Table has {len(table.columns)} columns (0-{len(table.columns)-1})."
+
+            # Convert width and type for Word format
+            if width_type.lower() == "points":
+                # Points to DXA (twentieths of a point)
+                word_width = width
+                word_type = "dxa"
+            elif width_type.lower() == "inches":
+                # Inches to points, then to DXA
+                word_width = width * 72  # 72 points per inch
+                word_type = "dxa"
+            elif width_type.lower() == "cm":
+                # CM to points, then to DXA
+                word_width = width * 28.35  # ~28.35 points per cm
+                word_type = "dxa"
+            elif width_type.lower() == "percent":
+                # Percentage (Word uses 50x the percentage value)
+                word_width = width
+                word_type = "pct"
+            else:  # auto
+                word_width = 0
+                word_type = "auto"
+
+            # Apply column width
+            success = set_column_width_by_position(table, col_index, word_width, word_type)
+
+            if success:
+                doc.save(filename)
+                return f"Column width set successfully for table {table_index}, column {col_index} to {width} {width_type}."
+            else:
+                return f"Failed to set column width. Check that indices are valid."
     except Exception as e:
         return f"Failed to set column width: {str(e)}"
 
@@ -783,44 +795,45 @@ async def set_table_column_widths(filename: str, table_index: int, widths: list,
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Convert widths and type for Word format
-        word_widths = []
-        for width in widths:
-            if width_type.lower() == "points":
-                word_widths.append(width)
-            elif width_type.lower() == "inches":
-                word_widths.append(width * 72)  # 72 points per inch
-            elif width_type.lower() == "cm":
-                word_widths.append(width * 28.35)  # ~28.35 points per cm
-            elif width_type.lower() == "percent":
-                word_widths.append(width)
-            else:  # auto
-                word_widths.append(0)
-        
-        # Determine Word type
-        if width_type.lower() == "percent":
-            word_type = "pct"
-        elif width_type.lower() == "auto":
-            word_type = "auto"
-        else:
-            word_type = "dxa"
-        
-        # Apply column widths
-        success = set_column_widths(table, word_widths, word_type)
-        
-        if success:
-            doc.save(filename)
-            return f"Column widths set successfully for table {table_index} with {len(widths)} columns in {width_type}."
-        else:
-            return f"Failed to set column widths."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Convert widths and type for Word format
+            word_widths = []
+            for width in widths:
+                if width_type.lower() == "points":
+                    word_widths.append(width)
+                elif width_type.lower() == "inches":
+                    word_widths.append(width * 72)  # 72 points per inch
+                elif width_type.lower() == "cm":
+                    word_widths.append(width * 28.35)  # ~28.35 points per cm
+                elif width_type.lower() == "percent":
+                    word_widths.append(width)
+                else:  # auto
+                    word_widths.append(0)
+
+            # Determine Word type
+            if width_type.lower() == "percent":
+                word_type = "pct"
+            elif width_type.lower() == "auto":
+                word_type = "auto"
+            else:
+                word_type = "dxa"
+
+            # Apply column widths
+            success = set_column_widths(table, word_widths, word_type)
+
+            if success:
+                doc.save(filename)
+                return f"Column widths set successfully for table {table_index} with {len(widths)} columns in {width_type}."
+            else:
+                return f"Failed to set column widths."
     except Exception as e:
         return f"Failed to set column widths: {str(e)}"
 
@@ -859,39 +872,40 @@ async def set_table_width(filename: str, table_index: int, width: float,
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Convert width and type for Word format
-        if width_type.lower() == "points":
-            word_width = width
-            word_type = "dxa"
-        elif width_type.lower() == "inches":
-            word_width = width * 72  # 72 points per inch
-            word_type = "dxa"
-        elif width_type.lower() == "cm":
-            word_width = width * 28.35  # ~28.35 points per cm
-            word_type = "dxa"
-        elif width_type.lower() == "percent":
-            word_width = width
-            word_type = "pct"
-        else:  # auto
-            word_width = 0
-            word_type = "auto"
-        
-        # Apply table width
-        success = set_table_width_func(table, word_width, word_type)
-        
-        if success:
-            doc.save(filename)
-            return f"Table width set successfully for table {table_index} to {width} {width_type}."
-        else:
-            return f"Failed to set table width."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Convert width and type for Word format
+            if width_type.lower() == "points":
+                word_width = width
+                word_type = "dxa"
+            elif width_type.lower() == "inches":
+                word_width = width * 72  # 72 points per inch
+                word_type = "dxa"
+            elif width_type.lower() == "cm":
+                word_width = width * 28.35  # ~28.35 points per cm
+                word_type = "dxa"
+            elif width_type.lower() == "percent":
+                word_width = width
+                word_type = "pct"
+            else:  # auto
+                word_width = 0
+                word_type = "auto"
+
+            # Apply table width
+            success = set_table_width_func(table, word_width, word_type)
+
+            if success:
+                doc.save(filename)
+                return f"Table width set successfully for table {table_index} to {width} {width_type}."
+            else:
+                return f"Failed to set table width."
     except Exception as e:
         return f"Failed to set table width: {str(e)}"
 
@@ -920,22 +934,23 @@ async def auto_fit_table_columns(filename: str, table_index: int) -> str:
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Apply auto-fit
-        success = auto_fit_table(table)
-        
-        if success:
-            doc.save(filename)
-            return f"Table {table_index} set to auto-fit columns based on content."
-        else:
-            return f"Failed to set table auto-fit."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Apply auto-fit
+            success = auto_fit_table(table)
+
+            if success:
+                doc.save(filename)
+                return f"Table {table_index} set to auto-fit columns based on content."
+            else:
+                return f"Failed to set table auto-fit."
     except Exception as e:
         return f"Failed to set table auto-fit: {str(e)}"
 
@@ -980,47 +995,48 @@ async def format_table_cell_text(filename: str, table_index: int, row_index: int
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Validate row and column indices
-        if row_index < 0 or row_index >= len(table.rows):
-            return f"Invalid row index. Table has {len(table.rows)} rows (0-{len(table.rows)-1})."
-        
-        if col_index < 0 or col_index >= len(table.rows[row_index].cells):
-            return f"Invalid column index. Row has {len(table.rows[row_index].cells)} cells (0-{len(table.rows[row_index].cells)-1})."
-        
-        # Apply cell text formatting
-        success = format_cell_text_by_position(table, row_index, col_index, text_content, 
-                                              bold, italic, underline, color, font_size, font_name)
-        
-        if success:
-            doc.save(filename)
-            format_desc = []
-            if text_content is not None:
-                format_desc.append(f"content='{text_content[:30]}{'...' if len(text_content) > 30 else ''}'")
-            if bold is not None:
-                format_desc.append(f"bold={bold}")
-            if italic is not None:
-                format_desc.append(f"italic={italic}")
-            if underline is not None:
-                format_desc.append(f"underline={underline}")
-            if color is not None:
-                format_desc.append(f"color={color}")
-            if font_size is not None:
-                format_desc.append(f"size={font_size}pt")
-            if font_name is not None:
-                format_desc.append(f"font={font_name}")
-            
-            format_str = ", ".join(format_desc) if format_desc else "no changes"
-            return f"Cell text formatted successfully in table {table_index}, cell ({row_index},{col_index}): {format_str}."
-        else:
-            return f"Failed to format cell text. Check that indices are valid."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Validate row and column indices
+            if row_index < 0 or row_index >= len(table.rows):
+                return f"Invalid row index. Table has {len(table.rows)} rows (0-{len(table.rows)-1})."
+
+            if col_index < 0 or col_index >= len(table.rows[row_index].cells):
+                return f"Invalid column index. Row has {len(table.rows[row_index].cells)} cells (0-{len(table.rows[row_index].cells)-1})."
+
+            # Apply cell text formatting
+            success = format_cell_text_by_position(table, row_index, col_index, text_content,
+                                                  bold, italic, underline, color, font_size, font_name)
+
+            if success:
+                doc.save(filename)
+                format_desc = []
+                if text_content is not None:
+                    format_desc.append(f"content='{text_content[:30]}{'...' if len(text_content) > 30 else ''}'")
+                if bold is not None:
+                    format_desc.append(f"bold={bold}")
+                if italic is not None:
+                    format_desc.append(f"italic={italic}")
+                if underline is not None:
+                    format_desc.append(f"underline={underline}")
+                if color is not None:
+                    format_desc.append(f"color={color}")
+                if font_size is not None:
+                    format_desc.append(f"size={font_size}pt")
+                if font_name is not None:
+                    format_desc.append(f"font={font_name}")
+
+                format_str = ", ".join(format_desc) if format_desc else "no changes"
+                return f"Cell text formatted successfully in table {table_index}, cell ({row_index},{col_index}): {format_str}."
+            else:
+                return f"Failed to format cell text. Check that indices are valid."
     except Exception as e:
         return f"Failed to format cell text: {str(e)}"
 
@@ -1073,43 +1089,44 @@ async def set_table_cell_padding(filename: str, table_index: int, row_index: int
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate table index
-        if table_index < 0 or table_index >= len(doc.tables):
-            return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
-        
-        table = doc.tables[table_index]
-        
-        # Validate row and column indices
-        if row_index < 0 or row_index >= len(table.rows):
-            return f"Invalid row index. Table has {len(table.rows)} rows (0-{len(table.rows)-1})."
-        
-        if col_index < 0 or col_index >= len(table.rows[row_index].cells):
-            return f"Invalid column index. Row has {len(table.rows[row_index].cells)} cells (0-{len(table.rows[row_index].cells)-1})."
-        
-        # Convert unit for Word format
-        word_unit = "dxa" if unit.lower() == "points" else "pct"
-        
-        # Apply cell padding
-        success = set_cell_padding_by_position(table, row_index, col_index, top, bottom, 
-                                              left, right, word_unit)
-        
-        if success:
-            doc.save(filename)
-            padding_desc = []
-            if top is not None:
-                padding_desc.append(f"top={top}")
-            if bottom is not None:
-                padding_desc.append(f"bottom={bottom}")
-            if left is not None:
-                padding_desc.append(f"left={left}")
-            if right is not None:
-                padding_desc.append(f"right={right}")
-            
-            padding_str = ", ".join(padding_desc) if padding_desc else "no padding"
-            return f"Cell padding set successfully for table {table_index}, cell ({row_index},{col_index}): {padding_str} {unit}."
-        else:
-            return f"Failed to set cell padding. Check that indices are valid."
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate table index
+            if table_index < 0 or table_index >= len(doc.tables):
+                return f"Invalid table index. Document has {len(doc.tables)} tables (0-{len(doc.tables)-1})."
+
+            table = doc.tables[table_index]
+
+            # Validate row and column indices
+            if row_index < 0 or row_index >= len(table.rows):
+                return f"Invalid row index. Table has {len(table.rows)} rows (0-{len(table.rows)-1})."
+
+            if col_index < 0 or col_index >= len(table.rows[row_index].cells):
+                return f"Invalid column index. Row has {len(table.rows[row_index].cells)} cells (0-{len(table.rows[row_index].cells)-1})."
+
+            # Convert unit for Word format
+            word_unit = "dxa" if unit.lower() == "points" else "pct"
+
+            # Apply cell padding
+            success = set_cell_padding_by_position(table, row_index, col_index, top, bottom,
+                                                  left, right, word_unit)
+
+            if success:
+                doc.save(filename)
+                padding_desc = []
+                if top is not None:
+                    padding_desc.append(f"top={top}")
+                if bottom is not None:
+                    padding_desc.append(f"bottom={bottom}")
+                if left is not None:
+                    padding_desc.append(f"left={left}")
+                if right is not None:
+                    padding_desc.append(f"right={right}")
+
+                padding_str = ", ".join(padding_desc) if padding_desc else "no padding"
+                return f"Cell padding set successfully for table {table_index}, cell ({row_index},{col_index}): {padding_str} {unit}."
+            else:
+                return f"Failed to set cell padding. Check that indices are valid."
     except Exception as e:
         return f"Failed to set cell padding: {str(e)}"

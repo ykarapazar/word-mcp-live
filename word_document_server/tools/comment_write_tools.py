@@ -8,7 +8,7 @@ import json
 import os
 
 from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
+from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, get_file_lock
 from word_document_server.core.comment_writer import add_comment_to_doc
 
 
@@ -46,7 +46,8 @@ async def add_comment(
         return json.dumps({"success": False, "error": "comment_text cannot be empty"})
 
     try:
-        result = add_comment_to_doc(filename, target_text, comment_text, author, initials)
+        async with get_file_lock(filename):
+            result = add_comment_to_doc(filename, target_text, comment_text, author, initials)
         return json.dumps(result, ensure_ascii=False, indent=2)
     except Exception as e:
         return json.dumps({"success": False, "error": f"Failed to add comment: {str(e)}"})

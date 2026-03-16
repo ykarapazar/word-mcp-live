@@ -8,7 +8,7 @@ import json
 import os
 from typing import Optional
 
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
+from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, get_file_lock
 from word_document_server.core.hyperlink_writer import add_hyperlink_to_doc
 
 
@@ -47,7 +47,8 @@ async def manage_hyperlinks(
             return json.dumps({"success": False, "error": "url cannot be empty"})
 
         try:
-            result = add_hyperlink_to_doc(filename, text, url, paragraph_index)
+            async with get_file_lock(filename):
+                result = add_hyperlink_to_doc(filename, text, url, paragraph_index)
             return json.dumps(result, ensure_ascii=False, indent=2)
         except Exception as e:
             return json.dumps({"success": False, "error": f"Failed to add hyperlink: {str(e)}"})

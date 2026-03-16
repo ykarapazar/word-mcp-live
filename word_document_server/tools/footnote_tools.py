@@ -14,7 +14,7 @@ from docx import Document
 from docx.shared import Pt
 from docx.enum.style import WD_STYLE_TYPE
 
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
+from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, get_file_lock
 from word_document_server.core.footnotes import (
     find_footnote_references,
     get_format_symbols,
@@ -51,47 +51,48 @@ async def add_footnote_to_document(filename: str, paragraph_index: int, footnote
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate paragraph index
-        if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
-            return f"Invalid paragraph index. Document has {len(doc.paragraphs)} paragraphs (0-{len(doc.paragraphs)-1})."
-        
-        paragraph = doc.paragraphs[paragraph_index]
-        
-        # In python-docx, we'd use paragraph.add_footnote(), but we'll use a more robust approach
-        try:
-            footnote = paragraph.add_run()
-            footnote.text = ""
-            
-            # Create the footnote reference
-            reference = footnote.add_footnote(footnote_text)
-            
-            doc.save(filename)
-            return f"Footnote added to paragraph {paragraph_index} in {filename}"
-        except AttributeError:
-            # Fall back to a simpler approach if direct footnote addition fails
-            last_run = paragraph.add_run()
-            last_run.text = "¹"  # Unicode superscript 1
-            last_run.font.superscript = True
-            
-            # Add a footnote section at the end if it doesn't exist
-            found_footnote_section = False
-            for p in doc.paragraphs:
-                if p.text.startswith("Footnotes:"):
-                    found_footnote_section = True
-                    break
-            
-            if not found_footnote_section:
-                doc.add_paragraph("\n").add_run()
-                doc.add_paragraph("Footnotes:").bold = True
-            
-            # Add footnote text
-            footnote_para = doc.add_paragraph("¹ " + footnote_text)
-            footnote_para.style = "Footnote Text" if "Footnote Text" in doc.styles else "Normal"
-            
-            doc.save(filename)
-            return f"Footnote added to paragraph {paragraph_index} in {filename} (simplified approach)"
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate paragraph index
+            if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
+                return f"Invalid paragraph index. Document has {len(doc.paragraphs)} paragraphs (0-{len(doc.paragraphs)-1})."
+
+            paragraph = doc.paragraphs[paragraph_index]
+
+            # In python-docx, we'd use paragraph.add_footnote(), but we'll use a more robust approach
+            try:
+                footnote = paragraph.add_run()
+                footnote.text = ""
+
+                # Create the footnote reference
+                reference = footnote.add_footnote(footnote_text)
+
+                doc.save(filename)
+                return f"Footnote added to paragraph {paragraph_index} in {filename}"
+            except AttributeError:
+                # Fall back to a simpler approach if direct footnote addition fails
+                last_run = paragraph.add_run()
+                last_run.text = "¹"  # Unicode superscript 1
+                last_run.font.superscript = True
+
+                # Add a footnote section at the end if it doesn't exist
+                found_footnote_section = False
+                for p in doc.paragraphs:
+                    if p.text.startswith("Footnotes:"):
+                        found_footnote_section = True
+                        break
+
+                if not found_footnote_section:
+                    doc.add_paragraph("\n").add_run()
+                    doc.add_paragraph("Footnotes:").bold = True
+
+                # Add footnote text
+                footnote_para = doc.add_paragraph("¹ " + footnote_text)
+                footnote_para.style = "Footnote Text" if "Footnote Text" in doc.styles else "Normal"
+
+                doc.save(filename)
+                return f"Footnote added to paragraph {paragraph_index} in {filename} (simplified approach)"
     except Exception as e:
         return f"Failed to add footnote: {str(e)}"
 
@@ -121,36 +122,37 @@ async def add_endnote_to_document(filename: str, paragraph_index: int, endnote_t
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Validate paragraph index
-        if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
-            return f"Invalid paragraph index. Document has {len(doc.paragraphs)} paragraphs (0-{len(doc.paragraphs)-1})."
-        
-        paragraph = doc.paragraphs[paragraph_index]
-        
-        # Add endnote reference
-        last_run = paragraph.add_run()
-        last_run.text = "†"  # Unicode dagger symbol common for endnotes
-        last_run.font.superscript = True
-        
-        # Check if endnotes section exists, if not create it
-        endnotes_heading_found = False
-        for para in doc.paragraphs:
-            if para.text == "Endnotes:" or para.text == "ENDNOTES":
-                endnotes_heading_found = True
-                break
-        
-        if not endnotes_heading_found:
-            # Add a page break before endnotes section
-            doc.add_page_break()
-            doc.add_heading("Endnotes:", level=1)
-        
-        # Add the endnote text
-        endnote_para = doc.add_paragraph("† " + endnote_text)
-        endnote_para.style = "Endnote Text" if "Endnote Text" in doc.styles else "Normal"
-        
-        doc.save(filename)
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Validate paragraph index
+            if paragraph_index < 0 or paragraph_index >= len(doc.paragraphs):
+                return f"Invalid paragraph index. Document has {len(doc.paragraphs)} paragraphs (0-{len(doc.paragraphs)-1})."
+
+            paragraph = doc.paragraphs[paragraph_index]
+
+            # Add endnote reference
+            last_run = paragraph.add_run()
+            last_run.text = "†"  # Unicode dagger symbol common for endnotes
+            last_run.font.superscript = True
+
+            # Check if endnotes section exists, if not create it
+            endnotes_heading_found = False
+            for para in doc.paragraphs:
+                if para.text == "Endnotes:" or para.text == "ENDNOTES":
+                    endnotes_heading_found = True
+                    break
+
+            if not endnotes_heading_found:
+                # Add a page break before endnotes section
+                doc.add_page_break()
+                doc.add_heading("Endnotes:", level=1)
+
+            # Add the endnote text
+            endnote_para = doc.add_paragraph("† " + endnote_text)
+            endnote_para.style = "Endnote Text" if "Endnote Text" in doc.styles else "Normal"
+
+            doc.save(filename)
         return f"Endnote added to paragraph {paragraph_index} in {filename}"
     except Exception as e:
         return f"Failed to add endnote: {str(e)}"
@@ -173,68 +175,68 @@ async def convert_footnotes_to_endnotes_in_document(filename: str) -> str:
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-  
-      
-        # Find all runs that might be footnote references
-        footnote_references = []
-        
-        for para_idx, para in enumerate(doc.paragraphs):
-            for run_idx, run in enumerate(para.runs):
-                # Check if this run is likely a footnote reference
-                # (superscript number or special character)
-                if run.font.superscript and (run.text.isdigit() or run.text in "¹²³⁴⁵⁶⁷⁸⁹"):
-                    footnote_references.append({
-                        "paragraph_index": para_idx,
-                        "run_index": run_idx,
-                        "text": run.text
-                    })
-        
-        if not footnote_references:
-            return f"No footnote references found in {filename}"
-        
-        # Create endnotes section
-        doc.add_page_break()
-        doc.add_heading("Endnotes:", level=1)
-        
-        # Create a placeholder for endnote content, we'll fill it later
-        endnote_content = []
-        
-        # Find the footnote text at the bottom of the page
-       
-        found_footnote_section = False
-        footnote_text = []
-        
-        for para in doc.paragraphs:
-            if not found_footnote_section and para.text.startswith("Footnotes:"):
-                found_footnote_section = True
-                continue
-            
-            if found_footnote_section:
-                footnote_text.append(para.text)
-        
-        # Create endnotes based on footnote references
-        for i, ref in enumerate(footnote_references):
-            # Add a new endnote
-            endnote_para = doc.add_paragraph()
-            
-            # Try to match with footnote text, or use placeholder
-            if i < len(footnote_text):
-                endnote_para.text = f"†{i+1} {footnote_text[i]}"
-            else:
-                endnote_para.text = f"†{i+1} Converted from footnote {ref['text']}"
-            
-            # Change the footnote reference to an endnote reference
-            try:
-                paragraph = doc.paragraphs[ref["paragraph_index"]]
-                paragraph.runs[ref["run_index"]].text = f"†{i+1}"
-            except IndexError:
-                # Skip if we can't locate the reference
-                pass
-        
-        # Save the document
-        doc.save(filename)
-        
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Find all runs that might be footnote references
+            footnote_references = []
+
+            for para_idx, para in enumerate(doc.paragraphs):
+                for run_idx, run in enumerate(para.runs):
+                    # Check if this run is likely a footnote reference
+                    # (superscript number or special character)
+                    if run.font.superscript and (run.text.isdigit() or run.text in "¹²³⁴⁵⁶⁷⁸⁹"):
+                        footnote_references.append({
+                            "paragraph_index": para_idx,
+                            "run_index": run_idx,
+                            "text": run.text
+                        })
+
+            if not footnote_references:
+                return f"No footnote references found in {filename}"
+
+            # Create endnotes section
+            doc.add_page_break()
+            doc.add_heading("Endnotes:", level=1)
+
+            # Create a placeholder for endnote content, we'll fill it later
+            endnote_content = []
+
+            # Find the footnote text at the bottom of the page
+
+            found_footnote_section = False
+            footnote_text = []
+
+            for para in doc.paragraphs:
+                if not found_footnote_section and para.text.startswith("Footnotes:"):
+                    found_footnote_section = True
+                    continue
+
+                if found_footnote_section:
+                    footnote_text.append(para.text)
+
+            # Create endnotes based on footnote references
+            for i, ref in enumerate(footnote_references):
+                # Add a new endnote
+                endnote_para = doc.add_paragraph()
+
+                # Try to match with footnote text, or use placeholder
+                if i < len(footnote_text):
+                    endnote_para.text = f"†{i+1} {footnote_text[i]}"
+                else:
+                    endnote_para.text = f"†{i+1} Converted from footnote {ref['text']}"
+
+                # Change the footnote reference to an endnote reference
+                try:
+                    paragraph = doc.paragraphs[ref["paragraph_index"]]
+                    paragraph.runs[ref["run_index"]].text = f"†{i+1}"
+                except IndexError:
+                    # Skip if we can't locate the reference
+                    pass
+
+            # Save the document
+            doc.save(filename)
+
         return f"Converted {len(footnote_references)} footnotes to endnotes in {filename}"
     except Exception as e:
         return f"Failed to convert footnotes to endnotes: {str(e)}"
@@ -263,15 +265,15 @@ async def add_footnote_after_text(filename: str, search_text: str, footnote_text
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        # Use robust implementation
-        success, message, details = add_footnote_robust(
-            filename=filename,
-            search_text=search_text,
-            footnote_text=footnote_text,
-            output_filename=output_filename,
-            position="after",
-            validate_location=True
-        )
+        async with get_file_lock(filename):
+            success, message, details = add_footnote_robust(
+                filename=filename,
+                search_text=search_text,
+                footnote_text=footnote_text,
+                output_filename=output_filename,
+                position="after",
+                validate_location=True
+            )
         return message
     except Exception as e:
         return f"Failed to add footnote: {str(e)}"
@@ -300,15 +302,15 @@ async def add_footnote_before_text(filename: str, search_text: str, footnote_tex
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        # Use robust implementation
-        success, message, details = add_footnote_robust(
-            filename=filename,
-            search_text=search_text,
-            footnote_text=footnote_text,
-            output_filename=output_filename,
-            position="before",
-            validate_location=True
-        )
+        async with get_file_lock(filename):
+            success, message, details = add_footnote_robust(
+                filename=filename,
+                search_text=search_text,
+                footnote_text=footnote_text,
+                output_filename=output_filename,
+                position="before",
+                validate_location=True
+            )
         return message
     except Exception as e:
         return f"Failed to add footnote: {str(e)}"
@@ -343,14 +345,14 @@ async def add_footnote_enhanced(filename: str, paragraph_index: int, footnote_te
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        # Use robust implementation
-        success, message, details = add_footnote_robust(
-            filename=filename,
-            paragraph_index=paragraph_index,
-            footnote_text=footnote_text,
-            output_filename=output_filename,
-            validate_location=True
-        )
+        async with get_file_lock(filename):
+            success, message, details = add_footnote_robust(
+                filename=filename,
+                paragraph_index=paragraph_index,
+                footnote_text=footnote_text,
+                output_filename=output_filename,
+                validate_location=True
+            )
         return message
     except Exception as e:
         return f"Failed to add footnote: {str(e)}"
@@ -379,37 +381,38 @@ async def customize_footnote_style(filename: str, numbering_format: str = "1, 2,
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        doc = Document(filename)
-        
-        # Create or get footnote style
-        footnote_style_name = "Footnote Text"
-        footnote_style = None
-        
-        try:
-            footnote_style = doc.styles[footnote_style_name]
-        except KeyError:
-            # Create the style if it doesn't exist
-            footnote_style = doc.styles.add_style(footnote_style_name, WD_STYLE_TYPE.PARAGRAPH)
-        
-        # Apply formatting to footnote style
-        if footnote_style:
-            if font_name:
-                footnote_style.font.name = font_name
-            if font_size:
-                footnote_style.font.size = Pt(font_size)
-        
-        # Find all existing footnote references
-        footnote_refs = find_footnote_references(doc)
-        
-        # Generate format symbols for the specified numbering format
-        format_symbols = get_format_symbols(numbering_format, len(footnote_refs) + start_number)
-        
-        # Apply custom formatting to footnotes
-        count = customize_footnote_formatting(doc, footnote_refs, format_symbols, start_number, footnote_style)
-        
-        # Save the document
-        doc.save(filename)
-        
+        async with get_file_lock(filename):
+            doc = Document(filename)
+
+            # Create or get footnote style
+            footnote_style_name = "Footnote Text"
+            footnote_style = None
+
+            try:
+                footnote_style = doc.styles[footnote_style_name]
+            except KeyError:
+                # Create the style if it doesn't exist
+                footnote_style = doc.styles.add_style(footnote_style_name, WD_STYLE_TYPE.PARAGRAPH)
+
+            # Apply formatting to footnote style
+            if footnote_style:
+                if font_name:
+                    footnote_style.font.name = font_name
+                if font_size:
+                    footnote_style.font.size = Pt(font_size)
+
+            # Find all existing footnote references
+            footnote_refs = find_footnote_references(doc)
+
+            # Generate format symbols for the specified numbering format
+            format_symbols = get_format_symbols(numbering_format, len(footnote_refs) + start_number)
+
+            # Apply custom formatting to footnotes
+            count = customize_footnote_formatting(doc, footnote_refs, format_symbols, start_number, footnote_style)
+
+            # Save the document
+            doc.save(filename)
+
         return f"Footnote style and numbering customized in {filename}"
     except Exception as e:
         return f"Failed to customize footnote style: {str(e)}"
@@ -441,14 +444,14 @@ async def delete_footnote_from_document(filename: str, footnote_id: Optional[int
         return f"Cannot modify document: {error_message}. Consider creating a copy first."
     
     try:
-        # Use robust implementation with orphan cleanup
-        success, message, details = delete_footnote_robust(
-            filename=filename,
-            footnote_id=footnote_id,
-            search_text=search_text,
-            output_filename=output_filename,
-            clean_orphans=True
-        )
+        async with get_file_lock(filename):
+            success, message, details = delete_footnote_robust(
+                filename=filename,
+                footnote_id=footnote_id,
+                search_text=search_text,
+                output_filename=output_filename,
+                clean_orphans=True
+            )
         return message
     except Exception as e:
         return f"Failed to delete footnote: {str(e)}"
@@ -506,15 +509,16 @@ async def add_footnote_robust_tool(
             }
     
     # Call robust implementation
-    success, message, details = add_footnote_robust(
-        filename=filename,
-        search_text=search_text,
-        paragraph_index=paragraph_index,
-        footnote_text=footnote_text,
-        validate_location=validate_location,
-        auto_repair=auto_repair
-    )
-    
+    async with get_file_lock(filename):
+        success, message, details = add_footnote_robust(
+            filename=filename,
+            search_text=search_text,
+            paragraph_index=paragraph_index,
+            footnote_text=footnote_text,
+            validate_location=validate_location,
+            auto_repair=auto_repair
+        )
+
     return {
         "success": success,
         "message": message,
@@ -563,13 +567,14 @@ async def delete_footnote_robust_tool(
             }
     
     # Call robust implementation
-    success, message, details = delete_footnote_robust(
-        filename=filename,
-        footnote_id=footnote_id,
-        search_text=search_text,
-        clean_orphans=clean_orphans
-    )
-    
+    async with get_file_lock(filename):
+        success, message, details = delete_footnote_robust(
+            filename=filename,
+            footnote_id=footnote_id,
+            search_text=search_text,
+            clean_orphans=clean_orphans
+        )
+
     return {
         "success": success,
         "message": message,
@@ -618,14 +623,15 @@ async def validate_footnotes_tool(filename: str) -> Dict[str, Any]:
 # ============================================================================
 
 async def add_footnote_to_document_robust(
-    filename: str, 
-    paragraph_index: int, 
+    filename: str,
+    paragraph_index: int,
     footnote_text: str
 ) -> str:
     """
     Robust version of add_footnote_to_document.
     Maintains backward compatibility with existing API.
     """
+    # Lock acquired inside add_footnote_robust_tool
     result = await add_footnote_robust_tool(
         filename=filename,
         paragraph_index=paragraph_index,
@@ -648,9 +654,11 @@ async def add_footnote_after_text_robust(
     working_file = filename
     if output_filename:
         import shutil
-        shutil.copy2(filename, output_filename)
+        async with get_file_lock(filename):
+            shutil.copy2(filename, output_filename)
         working_file = output_filename
-    
+
+    # Lock on working_file acquired inside add_footnote_robust_tool
     result = await add_footnote_robust_tool(
         filename=working_file,
         search_text=search_text,
@@ -673,9 +681,11 @@ async def add_footnote_before_text_robust(
     working_file = filename
     if output_filename:
         import shutil
-        shutil.copy2(filename, output_filename)
+        async with get_file_lock(filename):
+            shutil.copy2(filename, output_filename)
         working_file = output_filename
-    
+
+    # Lock on working_file acquired inside add_footnote_robust_tool
     result = await add_footnote_robust_tool(
         filename=working_file,
         search_text=search_text,
@@ -698,9 +708,11 @@ async def delete_footnote_from_document_robust(
     working_file = filename
     if output_filename:
         import shutil
-        shutil.copy2(filename, output_filename)
+        async with get_file_lock(filename):
+            shutil.copy2(filename, output_filename)
         working_file = output_filename
-    
+
+    # Lock on working_file acquired inside delete_footnote_robust_tool
     result = await delete_footnote_robust_tool(
         filename=working_file,
         footnote_id=footnote_id,

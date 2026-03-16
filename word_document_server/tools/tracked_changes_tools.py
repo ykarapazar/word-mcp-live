@@ -11,7 +11,7 @@ from typing import Optional
 
 from word_document_server.defaults import DEFAULT_AUTHOR
 
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
+from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, get_file_lock
 from word_document_server.core.tracked_changes import (
     track_replace_in_doc,
     track_insert_in_doc,
@@ -54,7 +54,8 @@ async def track_replace(
         return json.dumps({"success": False, "error": "old_text cannot be empty"})
 
     try:
-        result = track_replace_in_doc(filename, old_text, new_text, author)
+        async with get_file_lock(filename):
+            result = track_replace_in_doc(filename, old_text, new_text, author)
         return json.dumps(result, ensure_ascii=False, indent=2)
     except Exception as e:
         return json.dumps({"success": False, "error": f"Failed to track replace: {str(e)}"})
@@ -93,7 +94,8 @@ async def track_insert(
         return json.dumps({"success": False, "error": "insert_text cannot be empty"})
 
     try:
-        result = track_insert_in_doc(filename, after_text, insert_text, author)
+        async with get_file_lock(filename):
+            result = track_insert_in_doc(filename, after_text, insert_text, author)
         return json.dumps(result, ensure_ascii=False, indent=2)
     except Exception as e:
         return json.dumps({"success": False, "error": f"Failed to track insert: {str(e)}"})
@@ -128,7 +130,8 @@ async def track_delete(
         return json.dumps({"success": False, "error": "text cannot be empty"})
 
     try:
-        result = track_delete_in_doc(filename, text, author)
+        async with get_file_lock(filename):
+            result = track_delete_in_doc(filename, text, author)
         return json.dumps(result, ensure_ascii=False, indent=2)
     except Exception as e:
         return json.dumps({"success": False, "error": f"Failed to track delete: {str(e)}"})
@@ -180,7 +183,8 @@ async def accept_tracked_changes(
         return json.dumps({"success": False, "error": f"Cannot modify document: {error_message}"})
 
     try:
-        result = accept_tracked_changes_in_doc(filename, author, change_ids)
+        async with get_file_lock(filename):
+            result = accept_tracked_changes_in_doc(filename, author, change_ids)
         return json.dumps(result, ensure_ascii=False, indent=2)
     except Exception as e:
         return json.dumps({"success": False, "error": f"Failed to accept tracked changes: {str(e)}"})
@@ -211,7 +215,8 @@ async def reject_tracked_changes(
         return json.dumps({"success": False, "error": f"Cannot modify document: {error_message}"})
 
     try:
-        result = reject_tracked_changes_in_doc(filename, author, change_ids)
+        async with get_file_lock(filename):
+            result = reject_tracked_changes_in_doc(filename, author, change_ids)
         return json.dumps(result, ensure_ascii=False, indent=2)
     except Exception as e:
         return json.dumps({"success": False, "error": f"Failed to reject tracked changes: {str(e)}"})

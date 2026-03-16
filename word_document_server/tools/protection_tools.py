@@ -12,7 +12,7 @@ from typing import List, Optional, Dict, Any
 from docx import Document
 import msoffcrypto 
 
-from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension
+from word_document_server.utils.file_utils import check_file_writeable, ensure_docx_extension, get_file_lock
 
 
 
@@ -41,28 +41,28 @@ async def protect_document(filename: str, password: str) -> str:
         return f"Cannot protect document: {error_message}"
 
     try:
-        # Read the original file content
-        with open(filename, "rb") as infile:
-            original_data = infile.read()
+        async with get_file_lock(filename):
+            # Read the original file content
+            with open(filename, "rb") as infile:
+                original_data = infile.read()
 
-        # Create an msoffcrypto file object from the original data
-        file = msoffcrypto.OfficeFile(io.BytesIO(original_data))
-        file.load_key(password=password) # Set the password for encryption
+            # Create an msoffcrypto file object from the original data
+            file = msoffcrypto.OfficeFile(io.BytesIO(original_data))
+            file.load_key(password=password) # Set the password for encryption
 
-        # Encrypt the data into an in-memory buffer
-        encrypted_data_io = io.BytesIO()
-        
-        file.encrypt(password=password, outfile=encrypted_data_io) 
+            # Encrypt the data into an in-memory buffer
+            encrypted_data_io = io.BytesIO()
 
-        # Overwrite the original file with the encrypted data
-        with open(filename, "wb") as outfile:
-            outfile.write(encrypted_data_io.getvalue())
+            file.encrypt(password=password, outfile=encrypted_data_io)
 
-        
-        base_path, _ = os.path.splitext(filename)
-        metadata_path = f"{base_path}.protection"
-        if os.path.exists(metadata_path):
-            os.remove(metadata_path)
+            # Overwrite the original file with the encrypted data
+            with open(filename, "wb") as outfile:
+                outfile.write(encrypted_data_io.getvalue())
+
+            base_path, _ = os.path.splitext(filename)
+            metadata_path = f"{base_path}.protection"
+            if os.path.exists(metadata_path):
+                os.remove(metadata_path)
 
         return f"Document {filename} encrypted successfully with password."
 
@@ -98,16 +98,17 @@ async def add_restricted_editing(filename: str, password: str, editable_sections
         return f"Cannot protect document: {error_message}"
 
     try:
-        # Hash the password for security
-        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        async with get_file_lock(filename):
+            # Hash the password for security
+            password_hash = hashlib.sha256(password.encode()).hexdigest()
 
-        # Add protection info to metadata
-        success = add_protection_info(
-            filename,
-            protection_type="restricted",
-            password_hash=password_hash,
-            sections=editable_sections
-        )
+            # Add protection info to metadata
+            success = add_protection_info(
+                filename,
+                protection_type="restricted",
+                password_hash=password_hash,
+                sections=editable_sections
+            )
 
         if not editable_sections:
             return "No editable sections specified. Document will be fully protected."
@@ -138,32 +139,34 @@ async def add_digital_signature(filename: str, signer_name: str, reason: Optiona
         return f"Cannot add signature to document: {error_message}"
 
     try:
-        doc = Document(filename)
+        async with get_file_lock(filename):
+            doc = Document(filename)
 
-        # Create signature info
-        signature_info = create_signature_info(doc, signer_name, reason)
+            # Create signature info
+            signature_info = create_signature_info(doc, signer_name, reason)
 
-        # Add protection info to metadata
-        success = add_protection_info(
-            filename,
-            protection_type="signature",
-            password_hash="",  # No password for signature-only
-            signature_info=signature_info
-        )
+            # Add protection info to metadata
+            success = add_protection_info(
+                filename,
+                protection_type="signature",
+                password_hash="",  # No password for signature-only
+                signature_info=signature_info
+            )
+
+            if success:
+                # Add a visible signature block to the document
+                doc.add_paragraph("").add_run()  # Add empty paragraph for spacing
+                signature_para = doc.add_paragraph()
+                signature_para.add_run(f"Digitally signed by: {signer_name}").bold = True
+                if reason:
+                    signature_para.add_run(f"\nReason: {reason}")
+                signature_para.add_run(f"\nDate: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                signature_para.add_run(f"\nSignature ID: {signature_info['content_hash'][:8]}")
+
+                # Save the document with the visible signature
+                doc.save(filename)
 
         if success:
-            # Add a visible signature block to the document
-            doc.add_paragraph("").add_run()  # Add empty paragraph for spacing
-            signature_para = doc.add_paragraph()
-            signature_para.add_run(f"Digitally signed by: {signer_name}").bold = True
-            if reason:
-                signature_para.add_run(f"\nReason: {reason}")
-            signature_para.add_run(f"\nDate: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            signature_para.add_run(f"\nSignature ID: {signature_info['content_hash'][:8]}")
-
-            # Save the document with the visible signature
-            doc.save(filename)
-
             return f"Digital signature added to document {filename}"
         else:
             return f"Failed to add digital signature to document {filename}"
@@ -240,21 +243,22 @@ async def unprotect_document(filename: str, password: str) -> str:
         return f"Cannot modify document: {error_message}"
 
     try:
-        # Read the encrypted file content
-        with open(filename, "rb") as infile:
-            encrypted_data = infile.read()
+        async with get_file_lock(filename):
+            # Read the encrypted file content
+            with open(filename, "rb") as infile:
+                encrypted_data = infile.read()
 
-        # Create an msoffcrypto file object from the encrypted data
-        file = msoffcrypto.OfficeFile(io.BytesIO(encrypted_data))
-        file.load_key(password=password) # Set the password for decryption
+            # Create an msoffcrypto file object from the encrypted data
+            file = msoffcrypto.OfficeFile(io.BytesIO(encrypted_data))
+            file.load_key(password=password) # Set the password for decryption
 
-        # Decrypt the data into an in-memory buffer
-        decrypted_data_io = io.BytesIO()
-        file.decrypt(outfile=decrypted_data_io) # Pass the buffer as the 'outfile' argument
+            # Decrypt the data into an in-memory buffer
+            decrypted_data_io = io.BytesIO()
+            file.decrypt(outfile=decrypted_data_io) # Pass the buffer as the 'outfile' argument
 
-        # Overwrite the original file with the decrypted data
-        with open(filename, "wb") as outfile:
-            outfile.write(decrypted_data_io.getvalue())
+            # Overwrite the original file with the decrypted data
+            with open(filename, "wb") as outfile:
+                outfile.write(decrypted_data_io.getvalue())
 
         return f"Document {filename} decrypted successfully."
 
