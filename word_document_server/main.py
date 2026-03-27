@@ -1194,6 +1194,38 @@ def register_tools():
         """[Windows only] List all documents currently open in Word with name, path, pages, and saved status."""
         return live_read_tools.word_live_list_open()
 
+    # --- Live diff / snapshot tools (Windows only) ---
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Get Diff",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_get_diff(filename: str = None):
+        """[Windows only] Return only paragraphs that changed since the last snapshot. Compares current document text against the snapshot created by word_live_get_text or word_live_take_snapshot. Returns added, modified, and deleted paragraphs. Automatically updates the snapshot after diffing."""
+        return live_read_tools.word_live_get_diff(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Take Snapshot",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_take_snapshot(filename: str = None):
+        """[Windows only] Store a snapshot of the current document text for later diffing without returning the full text. Use word_live_get_diff afterwards to see what changed."""
+        return live_read_tools.word_live_take_snapshot(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Snapshot Status",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_snapshot_status(filename: str = None):
+        """[Windows only] Check whether a snapshot exists for the document and how old it is. Returns has_snapshot, age_seconds, and paragraph_count."""
+        return live_read_tools.word_live_snapshot_status(filename)
+
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Word Live Find Text",
