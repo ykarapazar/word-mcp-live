@@ -931,6 +931,27 @@ def register_tools():
 
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Word Live Insert Paragraphs",
+            destructiveHint=True,
+        ),
+        description=live_tools.word_live_insert_paragraphs.__doc__,
+    )
+    def word_live_insert_paragraphs(
+        filename: str = None,
+        paragraphs: list[str] = None,
+        target_text: str = None,
+        target_paragraph_index: int = None,
+        position: str = "after",
+        style: str = None,
+        track_changes: bool = False,
+    ):
+        return live_tools.word_live_insert_paragraphs(
+            filename, paragraphs, target_text, target_paragraph_index,
+            position, style, track_changes,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Word Live Format Text",
             destructiveHint=True,
         ),
@@ -1050,7 +1071,7 @@ def register_tools():
         before_row: int = None,
         before_col: int = None,
         header: str = None,
-        cells: list[str] = None,
+        cells: list = None,
         start_row: int = None,
         start_col: int = None,
         end_row: int = None,

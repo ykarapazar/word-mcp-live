@@ -134,6 +134,76 @@ def delete_row(table, row):
     return {"deleted_row": row, "remaining_rows": table.Rows.Count}
 
 
+def set_row(table, row, cells, accept_revisions=False):
+    """Set all cell values in an existing row.
+
+    Args:
+        table: Word Table COM object.
+        row: 1-based row index.
+        cells: List of strings (1-based col order). None values skip that cell.
+        accept_revisions: Accept tracked changes in cells before writing.
+
+    Returns:
+        dict with row, cells_updated list, and total_cols.
+    """
+    if row < 1 or row > table.Rows.Count:
+        raise ValueError(f"Row {row} out of range (1-{table.Rows.Count})")
+    updated = []
+    for i, val in enumerate(cells):
+        c = i + 1
+        if c > table.Columns.Count:
+            break
+        if val is None:
+            continue
+        cell = table.Cell(row, c)
+        if accept_revisions:
+            revs = cell.Range.Revisions
+            if revs.Count > 0:
+                revs.AcceptAll()
+        cell.Range.Text = str(val)
+        updated.append(c)
+    return {"row": row, "cells_updated": updated, "total_cols": table.Columns.Count}
+
+
+def set_range(table, data, start_row=1, start_col=1, accept_revisions=False):
+    """Set a rectangular block of cells from a 2D list.
+
+    Args:
+        table: Word Table COM object.
+        data: 2D list (list of row-lists). None values skip that cell.
+        start_row: 1-based row to start writing at (default 1).
+        start_col: 1-based column to start writing at (default 1).
+        accept_revisions: Accept tracked changes in cells before writing.
+
+    Returns:
+        dict with cells_updated count, start position, and data dimensions.
+    """
+    updated = []
+    for ri, row_data in enumerate(data):
+        r = start_row + ri
+        if r > table.Rows.Count:
+            break
+        for ci, val in enumerate(row_data):
+            c = start_col + ci
+            if c > table.Columns.Count:
+                break
+            if val is None:
+                continue
+            cell = table.Cell(r, c)
+            if accept_revisions:
+                revs = cell.Range.Revisions
+                if revs.Count > 0:
+                    revs.AcceptAll()
+            cell.Range.Text = str(val)
+            updated.append([r, c])
+    return {
+        "cells_updated": len(updated),
+        "start": [start_row, start_col],
+        "data_rows": len(data),
+        "data_cols": max((len(r) for r in data), default=0),
+    }
+
+
 def merge_cells(table, start_row, start_col, end_row, end_col):
     """Merge cells in a rectangular area. All indices 1-based."""
     _validate_cell(table, start_row, start_col)

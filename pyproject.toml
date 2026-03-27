@@ -25,6 +25,8 @@ dependencies = [
     "msoffcrypto-tool>=5.4.2",
     "docx2pdf>=0.1.8",
     "pytest>=8.4.2",
+    "Pillow>=10.0.0",
+    "pywin32>=311; sys_platform == 'win32'",
 ]
 
 [project.urls]

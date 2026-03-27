@@ -116,6 +116,147 @@ async def word_live_insert_text(
         return json.dumps({"error": str(e)})
 
 
+async def word_live_insert_paragraphs(
+    filename: str = None,
+    paragraphs: list[str] = None,
+    target_text: str = None,
+    target_paragraph_index: int = None,
+    position: str = "after",
+    style: str = None,
+    track_changes: bool = False,
+) -> str:
+    """[Windows only] Insert one or more paragraphs near a target paragraph in an open Word document.
+
+    Targets by text match or paragraph index (0-based, matching word_live_get_text output).
+    Inserts all paragraphs in a single undo record.
+
+    Args:
+        filename: Document name or path (None = active document).
+        paragraphs: List of paragraph texts to insert. Each string becomes one Word paragraph.
+        target_text: Text to search for (first matching paragraph). Mutually exclusive with target_paragraph_index.
+        target_paragraph_index: 0-based paragraph index (as returned by word_live_get_text).
+        position: 'before' or 'after' the target paragraph (default 'after').
+        style: Style name for inserted paragraphs. None = match the target paragraph's style.
+        track_changes: Track insertions as revisions.
+
+    Returns:
+        JSON with result info including count of paragraphs inserted.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live editing is only available on Windows"})
+
+    if not paragraphs or not isinstance(paragraphs, list):
+        return json.dumps({"error": "paragraphs must be a non-empty list of strings"})
+
+    if target_text is None and target_paragraph_index is None:
+        return json.dumps({"error": "Provide either target_text or target_paragraph_index"})
+
+    if target_text is not None and target_paragraph_index is not None:
+        return json.dumps({"error": "Provide target_text or target_paragraph_index, not both"})
+
+    if position not in ("before", "after"):
+        return json.dumps({"error": f"position must be 'before' or 'after', got '{position}'"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        # Find the target paragraph
+        total_paras = doc.Paragraphs.Count
+        target_para = None
+
+        if target_paragraph_index is not None:
+            # Convert 0-based (API) to 1-based (COM)
+            com_index = target_paragraph_index + 1
+            if com_index < 1 or com_index > total_paras:
+                return json.dumps({
+                    "error": f"target_paragraph_index {target_paragraph_index} out of range "
+                    f"(0-{total_paras - 1})"
+                })
+            target_para = doc.Paragraphs(com_index)
+        else:
+            # Search by text — match first paragraph containing target_text
+            for i in range(1, total_paras + 1):
+                para = doc.Paragraphs(i)
+                para_text = para.Range.Text.rstrip("\r\x07")
+                if target_text in para_text:
+                    target_para = para
+                    break
+            if target_para is None:
+                return json.dumps({"error": f"No paragraph found containing '{target_text}'"})
+
+        # Resolve style
+        resolved_style = style if style else target_para.Style.NameLocal
+
+        with undo_record(app, "MCP: Insert Paragraphs"):
+            prev_tracking = doc.TrackRevisions
+            prev_author = app.UserName
+            if track_changes:
+                doc.TrackRevisions = True
+                app.UserName = DEFAULT_AUTHOR
+
+            try:
+                inserted = 0
+
+                if position == "after":
+                    # Insert after target: collapse to end of target paragraph's range,
+                    # then insert each paragraph in forward order
+                    rng = target_para.Range.Duplicate
+                    for para_text in paragraphs:
+                        # Collapse to end of current range
+                        rng.Collapse(0)  # wdCollapseEnd
+                        # InsertAfter adds text; we insert a paragraph mark first
+                        rng.InsertParagraphAfter()
+                        rng.Collapse(0)  # wdCollapseEnd
+                        # Move back into the newly created paragraph
+                        rng.MoveStart(1, -1)  # wdCharacter, -1
+                        rng.Text = para_text
+                        # Apply style
+                        try:
+                            rng.Style = resolved_style
+                        except Exception:
+                            pass  # Style not found — leave default
+                        # Advance past the text we just wrote
+                        rng.Collapse(0)  # wdCollapseEnd
+                        inserted += 1
+
+                else:  # position == "before"
+                    # Insert before target: collapse to start, insert in reverse order
+                    # so they end up in the correct sequence
+                    for para_text in reversed(paragraphs):
+                        rng = target_para.Range.Duplicate
+                        rng.Collapse(1)  # wdCollapseStart
+                        rng.InsertParagraphBefore()
+                        # The new paragraph is now before the target; move into it
+                        rng.MoveEnd(1, -1)  # wdCharacter, -1 — back into new para
+                        rng.Collapse(1)  # wdCollapseStart
+                        rng.InsertAfter(para_text)
+                        try:
+                            rng.Style = resolved_style
+                        except Exception:
+                            pass
+                        inserted += 1
+
+            finally:
+                if track_changes:
+                    doc.TrackRevisions = prev_tracking
+                    app.UserName = prev_author
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "paragraphs_inserted": inserted,
+            "position": position,
+            "style": resolved_style,
+            "tracked": track_changes,
+        })
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 async def word_live_format_text(
     filename: str = None,
     start: int = None,
@@ -1240,29 +1381,30 @@ async def word_live_modify_table(
 ) -> str:
     """[Windows only] Modify a table in an open Word document.
 
-    Operations: get_info, set_cell, add_column, delete_column,
+    Operations: get_info, set_cell, set_row, set_range, add_column, delete_column,
     add_row, delete_row, merge_cells, autofit, delete_table.
     All row/col indices are 1-based (Word COM standard).
 
     Args:
         filename: Document name or path (None = active document).
         table_index: 1-based table index (default 1).
-        operation: One of: get_info, set_cell, add_column, delete_column,
-            add_row, delete_row, merge_cells, autofit, delete_table.
-        row: Row index for set_cell, delete_row.
+        operation: One of: get_info, set_cell, set_row, set_range, add_column,
+            delete_column, add_row, delete_row, merge_cells, autofit, delete_table.
+        row: Row index for set_cell, set_row, delete_row.
         col: Column index for set_cell, delete_column.
         text: Text for set_cell.
         before_row: Insert row before this index (add_row). None = append at end.
         before_col: Insert column before this index (add_column). None = append at end.
         header: Header text for new column (add_column, placed in row 1).
-        cells: List of cell values for new row/column.
-        start_row: Start row for merge_cells.
-        start_col: Start column for merge_cells.
+        cells: List of cell values for new row/column/set_row, or 2D list for set_range.
+            None values skip that cell (leave unchanged).
+        start_row: Start row for merge_cells or set_range (default 1).
+        start_col: Start column for merge_cells or set_range (default 1).
         end_row: End row for merge_cells.
         end_col: End column for merge_cells.
         autofit_mode: 'content', 'window', or 'fixed' (autofit operation).
-        accept_revisions: For set_cell — accept tracked changes in the cell before writing
-            (prevents layered text from old revisions persisting underneath new content).
+        accept_revisions: For set_cell/set_row/set_range — accept tracked changes in
+            cells before writing (prevents layered text from old revisions persisting).
         track_changes: Track modifications as revisions.
 
     Returns:
@@ -1308,6 +1450,18 @@ async def word_live_modify_table(
                         return json.dumps({"error": "set_cell requires row, col, and text"})
                     result = table_com.set_cell(table, row, col, text, accept_revisions=accept_revisions)
 
+                elif op == "set_row":
+                    if row is None or cells is None:
+                        return json.dumps({"error": "set_row requires row and cells"})
+                    result = table_com.set_row(table, row, cells, accept_revisions=accept_revisions)
+
+                elif op == "set_range":
+                    if not isinstance(cells, list) or not cells:
+                        return json.dumps({"error": "set_range requires cells as a non-empty 2D list"})
+                    sr = start_row if start_row is not None else 1
+                    sc = start_col if start_col is not None else 1
+                    result = table_com.set_range(table, cells, sr, sc, accept_revisions=accept_revisions)
+
                 elif op == "add_column":
                     result = table_com.add_column(table, before_col, header, cells)
 
@@ -1337,7 +1491,7 @@ async def word_live_modify_table(
 
                 else:
                     return json.dumps({
-                        "error": f"Unknown operation '{op}'. Use: get_info, set_cell, "
+                        "error": f"Unknown operation '{op}'. Use: get_info, set_cell, set_row, set_range, "
                         "add_column, delete_column, add_row, delete_row, merge_cells, autofit, delete_table"
                     })
             finally:

@@ -3,3 +3,5 @@ python-docx
 msoffcrypto-tool
 docx2pdf
 python-dotenv
+Pillow
+pywin32>=311
