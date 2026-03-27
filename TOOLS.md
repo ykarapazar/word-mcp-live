@@ -175,6 +175,7 @@ These require Windows with Microsoft Word installed. They operate on documents *
 | Tool | Description |
 |------|-------------|
 | `word_live_insert_text` | Insert text at a position (with optional tracked changes) |
+| `word_live_insert_paragraphs` | Insert multiple paragraphs near a target (by text match or paragraph index) in one call |
 | `word_live_delete_text` | Delete a character range |
 | `word_live_replace_text` | Find & replace via COM — works across tracked change boundaries; supports wildcards |
 | `word_live_format_text` | Format text (bold, italic, font, highlight, paragraph alignment, page break before) |
@@ -182,7 +183,7 @@ These require Windows with Microsoft Word installed. They operate on documents *
 | `word_live_format_table` | Format an existing table |
 | `word_live_apply_list` | Apply bullet, numbered, or multilevel list formatting |
 | `word_live_setup_heading_numbering` | Auto-numbered headings (1. / 1.1) with configurable style |
-| `word_live_modify_table` | Modify table structure: get info, set cell, add/delete rows/columns, merge cells, autofit, or delete table |
+| `word_live_modify_table` | Modify table structure: get info, set cell, set row, set range (bulk fill), add/delete rows/columns, merge cells, autofit, or delete table |
 | `word_live_save` | Save document in place or save-as to a new path (docx, pdf, rtf, txt) |
 | `word_live_toggle_track_changes` | Toggle or explicitly set track changes mode on/off |
 | `word_live_insert_image` | Insert an image with sizing, alignment, wrapping, and optional border |

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `word_live_insert_paragraphs` — insert multiple paragraphs near a target paragraph (by text match or paragraph index) in a single tool call and undo record
+- `word_live_modify_table` `set_row` operation — set all cells in an existing row with one call (accepts `row` + `cells` array; `None` values skip cells)
+- `word_live_modify_table` `set_range` operation — batch-fill a rectangular block of cells from a 2D list (accepts `cells` as 2D array + optional `start_row`/`start_col`)
+- `Pillow` added to dependencies (required by `word_screen_capture` but was missing, causing `ModuleNotFoundError`)
+- `pywin32>=311` added to dependencies with `sys_platform == 'win32'` marker (v311 is first release with Python 3.14 wheels)
+
 ## [1.3.0] - 2026-02-28
 
 ### Added
