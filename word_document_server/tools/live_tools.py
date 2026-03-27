@@ -187,8 +187,10 @@ async def word_live_insert_paragraphs(
             if target_para is None:
                 return json.dumps({"error": f"No paragraph found containing '{target_text}'"})
 
-        # Resolve style
-        resolved_style = style if style else target_para.Style.NameLocal
+        # Resolve style: if caller didn't specify, use "Normal" rather than
+        # inheriting the target's style (which may be a heading/bold style).
+        # The caller can explicitly pass the target's style if they want inheritance.
+        resolved_style = style if style else "Normal"
 
         with undo_record(app, "MCP: Insert Paragraphs"):
             prev_tracking = doc.TrackRevisions
@@ -201,19 +203,21 @@ async def word_live_insert_paragraphs(
                 inserted = 0
 
                 if position == "after":
-                    # Insert after target: collapse to end of target paragraph's range,
-                    # then insert each paragraph in forward order
+                    # Insert after target paragraph, one paragraph at a time.
+                    # Strategy: collapse to end of target, then for each paragraph
+                    # insert a paragraph mark + text using InsertAfter (not rng.Text,
+                    # which would destroy the paragraph mark).
                     rng = target_para.Range.Duplicate
+                    rng.Collapse(0)  # wdCollapseEnd
                     for para_text in paragraphs:
-                        # Collapse to end of current range
-                        rng.Collapse(0)  # wdCollapseEnd
-                        # InsertAfter adds text; we insert a paragraph mark first
+                        # Insert paragraph mark to create a new paragraph
                         rng.InsertParagraphAfter()
                         rng.Collapse(0)  # wdCollapseEnd
-                        # Move back into the newly created paragraph
-                        rng.MoveStart(1, -1)  # wdCharacter, -1
-                        rng.Text = para_text
-                        # Apply style
+                        # Now rng is at the start of the new empty paragraph.
+                        # Insert the text content.
+                        rng.InsertAfter(para_text)
+                        # Select the full paragraph we just created to apply style.
+                        # rng now spans from start of new para through inserted text.
                         try:
                             rng.Style = resolved_style
                         except Exception:
@@ -223,14 +227,12 @@ async def word_live_insert_paragraphs(
                         inserted += 1
 
                 else:  # position == "before"
-                    # Insert before target: collapse to start, insert in reverse order
-                    # so they end up in the correct sequence
+                    # Insert before target: insert in reverse order so they end up
+                    # in the correct sequence.
                     for para_text in reversed(paragraphs):
                         rng = target_para.Range.Duplicate
                         rng.Collapse(1)  # wdCollapseStart
                         rng.InsertParagraphBefore()
-                        # The new paragraph is now before the target; move into it
-                        rng.MoveEnd(1, -1)  # wdCharacter, -1 — back into new para
                         rng.Collapse(1)  # wdCollapseStart
                         rng.InsertAfter(para_text)
                         try:
