@@ -10,6 +10,99 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 
+def get_effective_text(paragraph) -> str:
+    """Get the effective (final) text of a paragraph, correctly handling tracked changes.
+
+    python-docx's paragraph.text only reads <w:r> elements that are direct
+    children of <w:p>.  Tracked-change markup wraps runs in <w:ins> or <w:del>,
+    so paragraph.text silently drops BOTH insertions AND deletions — producing
+    broken text that is neither the original nor the accepted version.
+
+    This function iterates all <w:t> elements in the paragraph XML.  Because
+    inserted text uses <w:t> (inside <w:ins>/<w:r>) while deleted text uses
+    <w:delText> (inside <w:del>/<w:r>), a simple iter('{…}t') naturally
+    includes insertions and excludes deletions — giving the correct final text.
+
+    For documents without tracked changes this returns the same result as
+    paragraph.text (just slightly slower due to XML iteration).
+    """
+    ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    W_T = f"{{{ns}}}t"
+    W_MOVEFROM = f"{{{ns}}}moveFrom"
+
+    texts = []
+    for t_elem in paragraph._element.iter(W_T):
+        # Skip text inside <w:moveFrom> (moved-away text should not appear)
+        skip = False
+        ancestor = t_elem.getparent()
+        while ancestor is not None and ancestor is not paragraph._element:
+            if ancestor.tag == W_MOVEFROM:
+                skip = True
+                break
+            ancestor = ancestor.getparent()
+        if not skip and t_elem.text:
+            texts.append(t_elem.text)
+    return "".join(texts)
+
+
+def get_redline_text(paragraph) -> str:
+    """Get paragraph text with tracked changes annotated inline.
+
+    Returns text with deletions marked as [-deleted-] and insertions as {+inserted+}.
+    Normal (untracked) text appears as-is.  For documents without tracked changes
+    this returns the same as paragraph.text / get_effective_text().
+    """
+    ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    W = lambda tag: f"{{{ns}}}{tag}"
+
+    parts = []
+    for child in paragraph._element:
+        tag = child.tag
+        if tag == W("r"):
+            # Normal run
+            for t in child.iter(W("t")):
+                if t.text:
+                    parts.append(t.text)
+        elif tag == W("ins"):
+            # Insertion
+            ins_texts = []
+            for t in child.iter(W("t")):
+                if t.text:
+                    ins_texts.append(t.text)
+            if ins_texts:
+                parts.append("{+" + "".join(ins_texts) + "+}")
+        elif tag == W("del"):
+            # Deletion
+            del_texts = []
+            for dt in child.iter(W("delText")):
+                if dt.text:
+                    del_texts.append(dt.text)
+            if not del_texts:
+                for t in child.iter(W("t")):
+                    if t.text:
+                        del_texts.append(t.text)
+            if del_texts:
+                parts.append("[-" + "".join(del_texts) + "-]")
+        elif tag == W("moveFrom"):
+            # Moved-away text (like deletion)
+            mf_texts = []
+            for t in child.iter(W("t")):
+                if t.text:
+                    mf_texts.append(t.text)
+            if mf_texts:
+                parts.append("[-" + "".join(mf_texts) + "-]")
+        elif tag == W("moveTo"):
+            # Moved-to text (like insertion)
+            mt_texts = []
+            for t in child.iter(W("t")):
+                if t.text:
+                    mt_texts.append(t.text)
+            if mt_texts:
+                parts.append("{+" + "".join(mt_texts) + "+}")
+        # Other elements (bookmarks, comments, etc.) are skipped
+    return "".join(parts)
+
+
 def get_document_properties(doc_path: str) -> Dict[str, Any]:
     """Get properties of a Word document."""
     import os
@@ -30,7 +123,7 @@ def get_document_properties(doc_path: str) -> Dict[str, Any]:
             "last_modified_by": core_props.last_modified_by or "",
             "revision": core_props.revision or 0,
             "page_count": len(doc.sections),
-            "word_count": sum(len(paragraph.text.split()) for paragraph in doc.paragraphs),
+            "word_count": sum(len(get_effective_text(paragraph).split()) for paragraph in doc.paragraphs),
             "paragraph_count": len(doc.paragraphs),
             "table_count": len(doc.tables)
         }
@@ -38,25 +131,39 @@ def get_document_properties(doc_path: str) -> Dict[str, Any]:
         return {"error": f"Failed to get document properties: {str(e)}"}
 
 
-def extract_document_text(doc_path: str) -> str:
-    """Extract all text from a Word document."""
+def extract_document_text(doc_path: str, show_revisions: bool = False) -> str:
+    """Extract all text from a Word document.
+
+    Args:
+        doc_path: Path to the .docx file.
+        show_revisions: If True, annotate tracked changes inline with
+            [-deleted-] and {+inserted+} markers.  If False (default),
+            return the effective final text with insertions applied and
+            deletions removed.
+
+    Note:
+        Uses get_effective_text / get_redline_text instead of paragraph.text
+        so that tracked-change documents are read correctly.
+    """
     import os
     if not os.path.exists(doc_path):
         return f"Document {doc_path} does not exist"
-    
+
+    text_fn = get_redline_text if show_revisions else get_effective_text
+
     try:
         doc = Document(doc_path)
         text = []
-        
+
         for paragraph in doc.paragraphs:
-            text.append(paragraph.text)
-            
+            text.append(text_fn(paragraph))
+
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
-                        text.append(paragraph.text)
-        
+                        text.append(text_fn(paragraph))
+
         return "\n".join(text)
     except Exception as e:
         return f"Failed to extract text: {str(e)}"
@@ -79,7 +186,7 @@ def get_document_structure(doc_path: str) -> Dict[str, Any]:
         for i, para in enumerate(doc.paragraphs):
             structure["paragraphs"].append({
                 "index": i,
-                "text": para.text[:100] + ("..." if len(para.text) > 100 else ""),
+                "text": get_effective_text(para)[:100] + ("..." if len(get_effective_text(para)) > 100 else ""),
                 "style": para.style.name if para.style else "Normal"
             })
         
@@ -127,9 +234,10 @@ def find_paragraph_by_text(doc, text, partial_match=False):
     matching_paragraphs = []
     
     for i, para in enumerate(doc.paragraphs):
-        if partial_match and text in para.text:
+        para_text = get_effective_text(para)
+        if partial_match and text in para_text:
             matching_paragraphs.append(i)
-        elif not partial_match and para.text == text:
+        elif not partial_match and para_text == text:
             matching_paragraphs.append(i)
             
     return matching_paragraphs
@@ -154,12 +262,12 @@ def find_and_replace_text(doc, old_text, new_text):
         # Skip TOC paragraphs
         if para.style and para.style.name.startswith("TOC"):
             continue
-        if old_text in para.text:
+        if old_text in get_effective_text(para):
             for run in para.runs:
                 if old_text in run.text:
                     run.text = run.text.replace(old_text, new_text)
                     count += 1
-    
+
     # Search in tables
     for table in doc.tables:
         for row in table.rows:
@@ -168,7 +276,7 @@ def find_and_replace_text(doc, old_text, new_text):
                     # Skip TOC paragraphs in tables
                     if para.style and para.style.name.startswith("TOC"):
                         continue
-                    if old_text in para.text:
+                    if old_text in get_effective_text(para):
                         for run in para.runs:
                             if old_text in run.text:
                                 run.text = run.text.replace(old_text, new_text)
@@ -211,7 +319,7 @@ def insert_header_near_text(doc_path: str, target_text: str = None, header_title
                 # Skip TOC paragraphs
                 if p.style and p.style.name.lower().startswith("toc"):
                     continue
-                if target_text and target_text in p.text:
+                if target_text and target_text in get_effective_text(p):
                     para = p
                     found = True
                     break
@@ -264,7 +372,7 @@ def insert_line_or_paragraph_near_text(doc_path: str, target_text: str = None, l
                 # Skip TOC paragraphs
                 if p.style and p.style.name.lower().startswith("toc"):
                     continue
-                if target_text and target_text in p.text:
+                if target_text and target_text in get_effective_text(p):
                     para = p
                     found = True
                     break
@@ -365,7 +473,7 @@ def insert_numbered_list_near_text(doc_path: str, target_text: str = None, list_
                 # Skip TOC paragraphs
                 if p.style and p.style.name.lower().startswith("toc"):
                     continue
-                if target_text and target_text in p.text:
+                if target_text and target_text in get_effective_text(p):
                     para = p
                     found = True
                     break
@@ -448,7 +556,7 @@ def delete_block_under_header(doc, header_text):
     header_idx = None
     
     for i, para in enumerate(doc.paragraphs):
-        if para.text.strip().lower() == header_text.strip().lower():
+        if get_effective_text(para).strip().lower() == header_text.strip().lower():
             header_para = para
             header_idx = i
             break
@@ -501,7 +609,7 @@ def replace_paragraph_block_below_header(
     header_para = None
     header_idx = None
     for i, para in enumerate(doc.paragraphs):
-        para_text = para.text.strip().lower()
+        para_text = get_effective_text(para).strip().lower()
         is_toc = is_toc_paragraph(para)
         if para_text == header_text.strip().lower() and not is_toc:
             header_para = para
@@ -603,7 +711,7 @@ def replace_block_between_manual_anchors(
     paras = doc.paragraphs
     anchor_idx = None
     for i, para in enumerate(paras):
-        if para.text.strip() == start_anchor_text.strip():
+        if get_effective_text(para).strip() == start_anchor_text.strip():
             anchor_idx = i
             break
     if anchor_idx is None:

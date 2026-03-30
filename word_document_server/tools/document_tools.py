@@ -65,15 +65,20 @@ async def get_document_info(filename: str) -> str:
         return f"Failed to get document info: {str(e)}"
 
 
-async def get_document_text(filename: str) -> str:
+async def get_document_text(filename: str, show_revisions: bool = False) -> str:
     """Extract all text from a Word document.
-    
+
+    By default returns the effective final text (insertions applied, deletions
+    removed).  Set show_revisions=True to get inline redline markup where
+    deletions appear as [-deleted-] and insertions as {+inserted+}.
+
     Args:
         filename: Path to the Word document
+        show_revisions: If True, annotate tracked changes inline
     """
     filename = ensure_docx_extension(filename)
-    
-    return extract_document_text(filename)
+
+    return extract_document_text(filename, show_revisions=show_revisions)
 
 
 async def get_document_outline(filename: str) -> str:

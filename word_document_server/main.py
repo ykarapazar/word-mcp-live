@@ -137,9 +137,14 @@ def register_tools():
             readOnlyHint=True,
         ),
     )
-    def get_document_text(filename: str):
-        """Extract all text from a Word document."""
-        return document_tools.get_document_text(filename)
+    def get_document_text(filename: str, show_revisions: bool = False):
+        """Extract all text from a Word document.
+
+        By default returns the effective final text (insertions applied,
+        deletions removed).  Set show_revisions=True to get inline redline
+        markup where deletions appear as [-deleted-] and insertions as
+        {+inserted+}."""
+        return document_tools.get_document_text(filename, show_revisions=show_revisions)
     
     @mcp.tool(
         annotations=ToolAnnotations(

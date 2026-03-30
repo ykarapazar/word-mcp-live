@@ -8,6 +8,8 @@ import os
 from typing import List, Optional, Dict, Any
 from docx import Document
 from docx.shared import Pt, RGBColor
+
+from word_document_server.utils.document_utils import get_effective_text
 from docx.enum.text import WD_COLOR_INDEX
 from docx.enum.style import WD_STYLE_TYPE
 
@@ -72,7 +74,7 @@ async def format_text(filename: str, paragraph_index: int, start_pos: int, end_p
                 return f"Invalid paragraph index. Document has {len(doc.paragraphs)} paragraphs (0-{len(doc.paragraphs)-1})."
 
             paragraph = doc.paragraphs[paragraph_index]
-            text = paragraph.text
+            text = get_effective_text(paragraph)
 
             # Validate text positions
             if start_pos < 0 or end_pos > len(text) or start_pos >= end_pos:

@@ -4,6 +4,8 @@ Extended document utilities for Word Document Server.
 from typing import Dict, List, Any, Tuple
 from docx import Document
 
+from word_document_server.utils.document_utils import get_effective_text
+
 
 def get_paragraph_text(doc_path: str, paragraph_index: int) -> Dict[str, Any]:
     """
@@ -31,7 +33,7 @@ def get_paragraph_text(doc_path: str, paragraph_index: int) -> Dict[str, Any]:
         
         return {
             "index": paragraph_index,
-            "text": paragraph.text,
+            "text": get_effective_text(paragraph),
             "style": paragraph.style.name if paragraph.style else "Normal",
             "is_heading": paragraph.style.name.startswith("Heading") if paragraph.style else False
         }
@@ -71,14 +73,15 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
         
         # Search in paragraphs
         for i, para in enumerate(doc.paragraphs):
-            # Prepare text for comparison
-            para_text = para.text
+            # Prepare text for comparison — use get_effective_text for tracked-change support
+            effective = get_effective_text(para)
+            para_text = effective
             search_text = text_to_find
-            
+
             if not match_case:
                 para_text = para_text.lower()
                 search_text = search_text.lower()
-            
+
             # Find all occurrences (simple implementation)
             start_pos = 0
             while True:
@@ -87,16 +90,16 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
                     words = para_text.split()
                     found = False
                     for word_idx, word in enumerate(words):
-                        if (word == search_text or 
+                        if (word == search_text or
                             (not match_case and word.lower() == search_text.lower())):
                             results["occurrences"].append({
                                 "paragraph_index": i,
                                 "position": word_idx,
-                                "context": para.text[:100] + ("..." if len(para.text) > 100 else "")
+                                "context": effective[:100] + ("..." if len(effective) > 100 else "")
                             })
                             results["total_count"] += 1
                             found = True
-                    
+
                     # Break after checking all words
                     break
                 else:
@@ -104,11 +107,11 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
                     pos = para_text.find(search_text, start_pos)
                     if pos == -1:
                         break
-                    
+
                     results["occurrences"].append({
                         "paragraph_index": i,
                         "position": pos,
-                        "context": para.text[:100] + ("..." if len(para.text) > 100 else "")
+                        "context": effective[:100] + ("..." if len(effective) > 100 else "")
                     })
                     results["total_count"] += 1
                     start_pos = pos + len(search_text)
@@ -119,13 +122,14 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
                 for col_idx, cell in enumerate(row.cells):
                     for para_idx, para in enumerate(cell.paragraphs):
                         # Prepare text for comparison
-                        para_text = para.text
+                        effective = get_effective_text(para)
+                        para_text = effective
                         search_text = text_to_find
-                        
+
                         if not match_case:
                             para_text = para_text.lower()
                             search_text = search_text.lower()
-                        
+
                         # Find all occurrences (simple implementation)
                         start_pos = 0
                         while True:
@@ -134,16 +138,16 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
                                 words = para_text.split()
                                 found = False
                                 for word_idx, word in enumerate(words):
-                                    if (word == search_text or 
+                                    if (word == search_text or
                                         (not match_case and word.lower() == search_text.lower())):
                                         results["occurrences"].append({
                                             "location": f"Table {table_idx}, Row {row_idx}, Column {col_idx}",
                                             "position": word_idx,
-                                            "context": para.text[:100] + ("..." if len(para.text) > 100 else "")
+                                            "context": effective[:100] + ("..." if len(effective) > 100 else "")
                                         })
                                         results["total_count"] += 1
                                         found = True
-                                
+
                                 # Break after checking all words
                                 break
                             else:
@@ -151,11 +155,11 @@ def find_text(doc_path: str, text_to_find: str, match_case: bool = True, whole_w
                                 pos = para_text.find(search_text, start_pos)
                                 if pos == -1:
                                     break
-                                
+
                                 results["occurrences"].append({
                                     "location": f"Table {table_idx}, Row {row_idx}, Column {col_idx}",
                                     "position": pos,
-                                    "context": para.text[:100] + ("..." if len(para.text) > 100 else "")
+                                    "context": effective[:100] + ("..." if len(effective) > 100 else "")
                                 })
                                 results["total_count"] += 1
                                 start_pos = pos + len(search_text)
