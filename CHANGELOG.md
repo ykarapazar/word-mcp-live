@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-08
+
+### Added
+- **macOS live editing support** via JavaScript for Automation (JXA) — 33 of 41 `word_live_*` tools now work on macOS with Word for Mac
+- New module `word_document_server/core/word_mac.py` — JXA bridge with 30+ functions for Word for Mac automation
+- Platform auto-detection: same tool names and parameters on both Windows and macOS
+- `pywin32` as conditional dependency (Windows only) in `pyproject.toml`
+
+### Changed
+- All `print()` calls in `main.py` redirected to stderr — fixes MCP stdio protocol corruption that prevented the server from loading in some clients
+- All live tool functions now dispatch to macOS JXA implementations when `sys.platform == "darwin"`
+- Updated tool count: 76 cross-platform + 41 Windows Live + 33 macOS Live
+
+### Not Available on macOS
+These 4 tools require Windows COM APIs with no AppleScript/JXA equivalent:
+- `word_live_get_undo_history` — undo stack inspection not exposed in Word for Mac's scripting dictionary
+- `word_live_reply_to_comment` — threaded comment replies not in AppleScript dictionary
+- `word_live_resolve_comment` — comment Done property not in AppleScript dictionary
+- `word_live_add_watermark` — requires VBA `Shapes.AddTextEffect` (VBA bridge killed by Apple sandboxing in Word 365)
+
 ## [1.4.1] - 2026-04-08
 
 ### Fixed
@@ -92,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Document management, content editing, formatting, tables, extraction
 - FastMCP server with stdio transport
 
+[1.5.0]: https://github.com/ykarapazar/word-mcp-live/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/ykarapazar/word-mcp-live/compare/v1.4.0...v1.4.1
 [1.3.0]: https://github.com/ykarapazar/word-mcp-live/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/ykarapazar/word-mcp-live/compare/v1.1.0...v1.2.0

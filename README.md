@@ -216,14 +216,32 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 ## Two Modes
 
-|  | Works everywhere | Windows with Word open |
+|  | Works everywhere | Live editing (Word open) |
 |---|---|---|
 | **What it does** | Create and edit saved .docx files | Edit documents live while you work in Word |
-| **Platform** | Windows, macOS, Linux | Windows only |
-| **Undo** | File-level saves | Per-action Ctrl+Z |
+| **Platform** | Windows, macOS, Linux | Windows (COM) and macOS (JXA) |
+| **Undo** | File-level saves | Per-action Ctrl+Z (Windows); per-operation undo (macOS) |
 | **Best for** | Batch processing, document generation | Interactive editing, formatting, review |
 
 Both modes work together. The AI picks the right one for the task.
+
+### macOS Live Editing (New in v1.5.0)
+
+Live tools now work on macOS via JavaScript for Automation (JXA). Same tool names, same parameters — the server detects your platform and uses the right automation backend.
+
+| Feature | Windows | macOS |
+|---------|---------|-------|
+| Text read/write/find/replace | COM | JXA |
+| Formatting (bold, font, style) | COM | JXA |
+| Track changes & revisions | COM | JXA |
+| Comments (add, delete, list) | COM | JXA |
+| Tables (read, write, add rows) | COM | JXA |
+| Page layout, headers, bookmarks | COM | JXA |
+| Equations, cross-references | COM | JXA |
+| Threaded comment replies | COM | Not available |
+| Comment resolve/unresolve | COM | Not available |
+| Undo history inspection | COM | Not available |
+| Watermarks | COM | Not available |
 
 ## Configuration
 
@@ -329,7 +347,8 @@ The comment appears in Word's Review panel, anchored to the specified text.
 
 - **Python 3.11+**
 - `python-docx`, `fastmcp`, `msoffcrypto-tool` (installed automatically)
-- **Windows Live tools only:** Windows 10/11 + Microsoft Word + `pywin32`
+- **Windows Live tools:** Windows 10/11 + Microsoft Word + `pywin32` (installed automatically)
+- **macOS Live tools:** macOS + Microsoft Word for Mac (uses built-in JXA — no extra dependencies)
 
 > The cross-platform tools work without Word installed — only python-docx is needed.
 
