@@ -292,9 +292,12 @@ var app = Application("Microsoft Word");
 {finder}
 var sel = app.selection;
 sel.homeKey({{unit: "a story", extend: "move"}});
+var f = sel.findObject;
+f.clearFormatting();
+f.replacement.clearFormatting();
+f.replacement.content = "";
 var results = [];
 for (var i = 0; i < {max_results}; i++) {{
-    var f = sel.findObject;
     f.content = "{escaped_search}";
     f.forward = true;
     f.wrap = "find stop";
@@ -508,6 +511,8 @@ try {{
     var sel = app.selection;
     sel.homeKey({{unit: "a story", extend: "move"}});
     var f = sel.findObject;
+    f.clearFormatting();
+    f.replacement.clearFormatting();
     f.content = "{escaped_find}";
     f.replacement.content = "{escaped_replace}";
     f.forward = true;
