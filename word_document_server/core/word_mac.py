@@ -1020,7 +1020,7 @@ def mac_modify_table(
         return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var t = d.tables[{table_index}];
+var t = d.tables[Math.max(0, {table_index} - 1)];  // 1-based → 0-based
 var rows = t.rows.length;
 var cols = t.columns.length;
 var cells = [];
@@ -1041,7 +1041,7 @@ var app = Application("Microsoft Word");
 var prevTracking = d.trackRevisions();
 if ({"true" if track_changes else "false"}) d.trackRevisions = true;
 try {{
-    var t = d.tables[{table_index}];
+    var t = d.tables[Math.max(0, {table_index} - 1)];  // 1-based → 0-based
     var cell = app.getCellFromTable(t, {{row: {row}, column: {col}}});
     cell.textObject.content = "{escaped_text}";
 }} finally {{
@@ -1054,7 +1054,7 @@ JSON.stringify({{set: true, row: {row}, col: {col}}});
         return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var t = d.tables[{table_index}];
+var t = d.tables[Math.max(0, {table_index} - 1)];  // 1-based → 0-based
 var targetRow = {row or "t.rows.length"};
 var cell = app.getCellFromTable(t, {{row: targetRow, column: 1}});
 app.select(cell.textObject);
@@ -1066,7 +1066,7 @@ JSON.stringify({{inserted: true, rows: t.rows.length}});
         return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var t = d.tables[{table_index}];
+var t = d.tables[Math.max(0, {table_index} - 1)];  // 1-based → 0-based
 var targetRow = {row or "t.rows.length"};
 app.delete(t.rows[targetRow - 1]);
 JSON.stringify({{deleted: true, rows: t.rows.length}});
