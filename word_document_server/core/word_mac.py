@@ -44,6 +44,30 @@ def _run_jxa(script: str, timeout: int = 30) -> str:
     return result.stdout.strip()
 
 
+def _run_applescript(script: str, timeout: int = 30) -> str:
+    """Execute an AppleScript and return stdout.
+
+    Some Word for Mac features (e.g., make new Word comment) only work
+    via AppleScript, not JXA. This is the fallback for those cases.
+    """
+    result = subprocess.run(
+        ["/usr/bin/osascript"],
+        input=script,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise RuntimeError(f"AppleScript error: {stderr}")
+    return result.stdout.strip()
+
+
+def _escape_as(s: str) -> str:
+    """Escape a Python string for safe embedding in AppleScript."""
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _escape_js(s: str) -> str:
     """Escape a Python string for safe embedding in JavaScript."""
     return (
@@ -634,13 +658,23 @@ var r = p.textObject;
     else:
         return json.dumps({"error": "Must provide start/end or paragraph_index"})
 
-    return _run_jxa(f"""
-var app = Application("Microsoft Word");
-{finder}
-{range_js}
-app.make({{new: "Word comment", at: d, withProperties: {{commentText: "{escaped_text}", scope: r}}}});
-JSON.stringify({{added: true, commentCount: d.wordComments.length}});
-""")
+    # JXA's make() doesn't work for Word comments — use AppleScript
+    escaped_as_text = _escape_as(text)
+    if start is not None and end is not None:
+        range_as = f"set r to create range active document start {start} end {end}"
+    elif paragraph_index is not None:
+        range_as = f"set r to text object of paragraph {paragraph_index + 1} of active document"
+    else:
+        return json.dumps({"error": "Must provide start/end or paragraph_index"})
+
+    result = _run_applescript(f'''
+tell application "Microsoft Word"
+    {range_as}
+    make new Word comment at active document with properties {{comment text:"{escaped_as_text}", scope:r}}
+    return count of Word comments of active document
+end tell
+''')
+    return json.dumps({"added": True, "commentCount": int(result)})
 
 
 def mac_delete_comment(filename: str = None, comment_index: int = 0) -> str:

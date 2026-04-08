@@ -126,7 +126,7 @@ async def word_live_add_header_footer(
     """
     if _MAC_AVAILABLE:
         from word_document_server.core.word_mac import mac_add_header_footer
-        return mac_add_header_footer(filename=filename, section_index=section_index, header_text=header_text, footer_text=footer_text, alignment=alignment)
+        return mac_add_header_footer(filename=filename, section_index=section_index, header_text=header_text, footer_text=footer_text)
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
@@ -368,7 +368,7 @@ async def word_live_set_paragraph_spacing(
     """
     if _MAC_AVAILABLE:
         from word_document_server.core.word_mac import mac_set_paragraph_spacing
-        return mac_set_paragraph_spacing(filename=filename, paragraph_index=paragraph_index, start_paragraph=start_paragraph, end_paragraph=end_paragraph, space_before=space_before, space_after=space_after, line_spacing=line_spacing, keep_with_next=keep_with_next, keep_together=keep_together, alignment=alignment)
+        return mac_set_paragraph_spacing(filename=filename, paragraph_index=paragraph_index, start_paragraph=start_paragraph, end_paragraph=end_paragraph, space_before=space_before_pt, space_after=space_after_pt, line_spacing=line_spacing, keep_with_next=keep_with_next, keep_together=keep_together, alignment=alignment)
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
