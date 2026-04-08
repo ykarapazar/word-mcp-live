@@ -988,6 +988,27 @@ def register_tools():
 
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Word Live Insert Paragraphs",
+            destructiveHint=True,
+        ),
+        description=live_tools.word_live_insert_paragraphs.__doc__,
+    )
+    def word_live_insert_paragraphs(
+        filename: str = None,
+        paragraphs: list = None,
+        target_text: str = None,
+        target_paragraph_index: int = None,
+        position: str = "after",
+        style: str = None,
+        track_changes: bool = False,
+    ):
+        return live_tools.word_live_insert_paragraphs(
+            filename, paragraphs, target_text, target_paragraph_index,
+            position, style, track_changes,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Word Live Add Table",
             destructiveHint=True,
         ),
@@ -1050,7 +1071,7 @@ def register_tools():
         before_row: int = None,
         before_col: int = None,
         header: str = None,
-        cells: list[str] = None,
+        cells: list = None,
         start_row: int = None,
         start_col: int = None,
         end_row: int = None,
@@ -1156,6 +1177,36 @@ def register_tools():
     def word_live_get_text(filename: str = None):
         """[Windows only] Get all text from a Word document open in Word, paragraph by paragraph. For large documents (200+ paragraphs), automatically returns only the first 3 pages — use word_live_get_page_text to read specific pages."""
         return live_read_tools.word_live_get_text(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Take Snapshot",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_take_snapshot(filename: str = None):
+        """[Windows only] Store a snapshot of the current document text for later diffing without returning the full text. Use word_live_get_diff afterwards to see what changed."""
+        return live_read_tools.word_live_take_snapshot(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Get Diff",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_get_diff(filename: str = None):
+        """[Windows only] Return only paragraphs that changed since the last snapshot. Compares current document against snapshot from word_live_take_snapshot. Returns added, modified, deleted paragraphs. Automatically updates snapshot after diffing."""
+        return live_read_tools.word_live_get_diff(filename)
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Word Live Snapshot Status",
+            readOnlyHint=True,
+        ),
+    )
+    def word_live_snapshot_status(filename: str = None):
+        """[Windows only] Check whether a snapshot exists for the document and how old it is. Returns has_snapshot, age_seconds, and paragraph_count."""
+        return live_read_tools.word_live_snapshot_status(filename)
 
     @mcp.tool(
         annotations=ToolAnnotations(

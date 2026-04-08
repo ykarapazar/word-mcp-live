@@ -7,8 +7,229 @@ that python-docx cannot open.
 
 import json
 import sys
+import time
+from difflib import SequenceMatcher
 
 from word_document_server.defaults import DEFAULT_AUTHOR
+
+
+# ---------------------------------------------------------------------------
+# Paragraph snapshot helpers (in-memory, per-session)
+# ---------------------------------------------------------------------------
+
+_paragraph_snapshots: dict[str, dict] = {}
+
+
+def _doc_key(doc) -> str:
+    """Return a stable, case-insensitive key for an open COM document."""
+    return doc.Name.lower()
+
+
+def _read_paragraphs(doc) -> list[dict]:
+    """Read all paragraphs from *doc* and return as a list of dicts."""
+    paras = []
+    for i in range(1, doc.Paragraphs.Count + 1):
+        text = doc.Paragraphs(i).Range.Text.rstrip("\r\x07")
+        paras.append({"index": i, "text": text})
+    return paras
+
+
+def _store_snapshot(doc, paragraphs: list[dict]) -> None:
+    """Cache *paragraphs* for later diffing."""
+    _paragraph_snapshots[_doc_key(doc)] = {
+        "timestamp": time.time(),
+        "paragraphs": paragraphs,
+    }
+
+
+def _get_snapshot(doc) -> dict | None:
+    """Return the stored snapshot for *doc*, or None."""
+    return _paragraph_snapshots.get(_doc_key(doc))
+
+
+# ---------------------------------------------------------------------------
+# Snapshot / diff tools
+# ---------------------------------------------------------------------------
+
+
+async def word_live_take_snapshot(filename: str = None) -> str:
+    """[Windows only] Store a snapshot of the current document text for later diffing.
+
+    Call this to set a baseline without returning the full text.
+    Subsequent calls to word_live_get_diff will compare against this snapshot.
+
+    Args:
+        filename: Document name or path (None = active document).
+
+    Returns:
+        JSON confirmation with paragraph count and timestamp.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+        paras = _read_paragraphs(doc)
+        _store_snapshot(doc, paras)
+        snap = _get_snapshot(doc)
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "paragraph_count": len(paras),
+            "snapshot_timestamp": snap["timestamp"] if snap else None,
+            "message": "Snapshot stored. Use word_live_get_diff to see changes.",
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_get_diff(filename: str = None) -> str:
+    """[Windows only] Return only the paragraphs that changed since the last snapshot.
+
+    Compares the current document text against the most recent snapshot
+    (created by word_live_take_snapshot). Returns added, modified, and
+    deleted paragraphs with their indices.
+
+    If no snapshot exists, returns an error prompting a snapshot first.
+
+    Args:
+        filename: Document name or path (None = active document).
+
+    Returns:
+        JSON with keys: added, modified, deleted, unchanged_count,
+        snapshot_age_seconds, and current_paragraph_count.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        snap = _get_snapshot(doc)
+        if snap is None:
+            return json.dumps({
+                "error": "No snapshot exists for this document. "
+                         "Call word_live_take_snapshot first.",
+            })
+
+        old_paras = snap["paragraphs"]
+        new_paras = _read_paragraphs(doc)
+
+        old_texts = [p["text"] for p in old_paras]
+        new_texts = [p["text"] for p in new_paras]
+
+        matcher = SequenceMatcher(None, old_texts, new_texts)
+
+        added: list[dict] = []
+        modified: list[dict] = []
+        deleted: list[dict] = []
+        unchanged = 0
+
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == "equal":
+                unchanged += (j2 - j1)
+            elif tag == "replace":
+                for k in range(max(i2 - i1, j2 - j1)):
+                    old_idx = i1 + k if (i1 + k) < i2 else None
+                    new_idx = j1 + k if (j1 + k) < j2 else None
+                    if old_idx is not None and new_idx is not None:
+                        modified.append({
+                            "paragraph_index": new_idx + 1,
+                            "old_text": old_texts[old_idx],
+                            "new_text": new_texts[new_idx],
+                        })
+                    elif new_idx is not None:
+                        added.append({
+                            "paragraph_index": new_idx + 1,
+                            "text": new_texts[new_idx],
+                        })
+                    else:
+                        deleted.append({
+                            "old_paragraph_index": old_idx + 1,
+                            "text": old_texts[old_idx],
+                        })
+            elif tag == "insert":
+                for j in range(j1, j2):
+                    added.append({
+                        "paragraph_index": j + 1,
+                        "text": new_texts[j],
+                    })
+            elif tag == "delete":
+                for i in range(i1, i2):
+                    deleted.append({
+                        "old_paragraph_index": i + 1,
+                        "text": old_texts[i],
+                    })
+
+        # Update snapshot to current state after diffing
+        _store_snapshot(doc, new_paras)
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "snapshot_age_seconds": round(time.time() - snap["timestamp"], 1),
+            "current_paragraph_count": len(new_paras),
+            "previous_paragraph_count": len(old_paras),
+            "unchanged_count": unchanged,
+            "added": added,
+            "modified": modified,
+            "deleted": deleted,
+            "has_changes": bool(added or modified or deleted),
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def word_live_snapshot_status(filename: str = None) -> str:
+    """[Windows only] Check whether a snapshot exists for the document and how old it is.
+
+    Args:
+        filename: Document name or path (None = active document).
+
+    Returns:
+        JSON with has_snapshot, age_seconds, and paragraph_count.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import get_word_app, find_document
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+        snap = _get_snapshot(doc)
+
+        if snap is None:
+            return json.dumps({
+                "success": True,
+                "document": doc.Name,
+                "has_snapshot": False,
+            })
+
+        return json.dumps({
+            "success": True,
+            "document": doc.Name,
+            "has_snapshot": True,
+            "age_seconds": round(time.time() - snap["timestamp"], 1),
+            "paragraph_count": len(snap["paragraphs"]),
+        })
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Original read tools
+# ---------------------------------------------------------------------------
 
 
 async def word_live_get_text(filename: str = None) -> str:

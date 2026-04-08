@@ -177,12 +177,13 @@ These require Windows with Microsoft Word installed. They operate on documents *
 | `word_live_insert_text` | Insert text at a position (with optional tracked changes) |
 | `word_live_delete_text` | Delete a character range |
 | `word_live_replace_text` | Find & replace via COM — works across tracked change boundaries; supports wildcards |
+| `word_live_insert_paragraphs` | Insert multiple paragraphs near a target (by text or index) in a single undo record |
 | `word_live_format_text` | Format text (bold, italic, font, highlight, paragraph alignment, page break before) |
 | `word_live_add_table` | Insert a table |
 | `word_live_format_table` | Format an existing table |
 | `word_live_apply_list` | Apply bullet, numbered, or multilevel list formatting |
 | `word_live_setup_heading_numbering` | Auto-numbered headings (1. / 1.1) with configurable style |
-| `word_live_modify_table` | Modify table structure: get info, set cell, add/delete rows/columns, merge cells, autofit, or delete table |
+| `word_live_modify_table` | Modify table structure: get info, set cell, set row, set range, add/delete rows/columns, merge cells, autofit, or delete table |
 | `word_live_save` | Save document in place or save-as to a new path (docx, pdf, rtf, txt) |
 | `word_live_toggle_track_changes` | Toggle or explicitly set track changes mode on/off |
 | `word_live_insert_image` | Insert an image with sizing, alignment, wrapping, and optional border |
@@ -198,6 +199,9 @@ These require Windows with Microsoft Word installed. They operate on documents *
 |------|-------------|
 | `word_live_list_open` | List all documents currently open in Word with name, path, pages, and saved status |
 | `word_live_get_text` | Get all text paragraph by paragraph |
+| `word_live_take_snapshot` | Store paragraph baseline for efficient change detection |
+| `word_live_get_diff` | Compare current document against snapshot — returns only changed paragraphs |
+| `word_live_snapshot_status` | Check snapshot existence and age |
 | `word_live_get_page_text` | Get text from specific page(s) with char offsets for chaining |
 | `word_live_get_paragraph_format` | Inspect paragraph formatting (font, spacing, alignment, list info, per-run detail) |
 | `word_live_get_info` | Get document metadata (pages, words, sections) |

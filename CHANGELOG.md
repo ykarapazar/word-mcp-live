@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `word_live_insert_paragraphs` — insert multiple paragraphs near a target (by text or index) in a single undo record
+- `word_live_take_snapshot` — store paragraph baseline for efficient change detection
+- `word_live_get_diff` — compare current document against snapshot, returns only changed paragraphs
+- `word_live_snapshot_status` — check snapshot existence and age
+- `word_live_modify_table` — new `set_row` and `set_range` operations for bulk cell updates
+
+### Fixed
+- `word_live_replace_text` — infinite loop when document has TrackRevisions enabled independently of `track_changes` parameter (#7)
+- All destructive tools now unconditionally restore `doc.TrackRevisions` in `finally` block
+
+### Credits
+- Snapshot/diff tools, `insert_paragraphs`, and bulk table operations adapted from PR #5 by @FarhadGSRX
+
 ## [1.3.0] - 2026-02-28
 
 ### Added
