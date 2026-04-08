@@ -499,15 +499,15 @@ async def word_live_find_text(
     """Find text in an open Word document.
 
     Supports Word special characters when use_wildcards=True:
-    ^m (manual page break), ^t (tab), ^p (paragraph mark), and Word wildcard syntax.
+    ^m (manual page break), ^t (tab), ^p (paragraph mark), ^s (non-breaking space), and Word wildcard syntax.
     Note: whole_word is ignored when use_wildcards is True (Word limitation).
 
     Args:
         filename: Document name or path (None = active document).
-        search_text: Text to search for. With use_wildcards=True, supports ^m, ^t, ^p and Word wildcards.
+        search_text: Text to search for. With use_wildcards=True, supports ^m, ^t, ^p, ^s and Word wildcards.
         match_case: Case-sensitive search.
         whole_word: Match whole words only (ignored when use_wildcards=True).
-        use_wildcards: Enable Word wildcards and special characters (^m, ^t, ^p, etc.).
+        use_wildcards: Enable Word wildcards and special characters (^m, ^t, ^p, ^s, etc.).
         context_chars: Characters of context before/after each match (default 60).
         max_results: Maximum number of matches to return.
 

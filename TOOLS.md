@@ -176,7 +176,7 @@ These require Windows with Microsoft Word installed. They operate on documents *
 |------|-------------|
 | `word_live_insert_text` | Insert text at a position (with optional tracked changes) |
 | `word_live_delete_text` | Delete a character range |
-| `word_live_replace_text` | Find & replace via COM — works across tracked change boundaries; supports wildcards |
+| `word_live_replace_text` | Find & replace via COM — works across tracked change boundaries; supports wildcards including `^s` (non-breaking space) |
 | `word_live_insert_paragraphs` | Insert multiple paragraphs near a target (by text or index) in a single undo record |
 | `word_live_format_text` | Format text (bold, italic, font, highlight, paragraph alignment, page break before) |
 | `word_live_add_table` | Insert a table |

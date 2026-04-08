@@ -767,11 +767,11 @@ async def word_live_replace_text(
 
     Uses Word's native Find & Replace, which works across tracked change boundaries
     (unlike manual delete+insert). Supports Word special characters when use_wildcards=True:
-    ^m (manual page break), ^t (tab), ^p (paragraph mark), and Word wildcard syntax.
+    ^m (manual page break), ^t (tab), ^p (paragraph mark), ^s (non-breaking space), and Word wildcard syntax.
 
     Args:
         filename: Document name or path (None = active document).
-        find_text: Text to find. With use_wildcards=True, supports ^m, ^t, ^p and Word wildcards.
+        find_text: Text to find. With use_wildcards=True, supports ^m, ^t, ^p, ^s and Word wildcards.
         replace_text: Replacement text. Use "" to delete matches.
         match_case: Case-sensitive search.
         match_whole_word: Match whole words only (ignored when use_wildcards=True).
@@ -842,7 +842,7 @@ async def word_live_replace_text(
                         break
                     # Convert Word special characters to actual characters for rng.Text assignment
                     # (rng.Text doesn't interpret ^p/^t/^m like Find.Execute Replace does)
-                    processed = replace_text.replace("^p", "\r").replace("^t", "\t").replace("^m", "\x0c")
+                    processed = replace_text.replace("^p", "\r").replace("^t", "\t").replace("^m", "\x0c").replace("^s", "\u00a0")
                     rng.Text = processed
                     count += 1
                     if not replace_all:
