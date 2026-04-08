@@ -834,7 +834,8 @@ def mac_set_page_layout(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var ps = d.sections[{section_index}].pageSetup;
+var secIdx = Math.max(0, {section_index} - 1);  // Tool sends 1-based, JXA is 0-based
+var ps = d.sections[secIdx].pageSetup;
 {props_js}
 JSON.stringify({{
     orientation: ps.orientation(),
@@ -870,7 +871,7 @@ def mac_add_header_footer(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var s = d.sections[{section_index}];
+var s = d.sections[Math.max(0, {section_index} - 1)];  // 1-based → 0-based
 {header_js}
 {footer_js}
 JSON.stringify({{added: true}});
@@ -940,7 +941,8 @@ def mac_add_bookmark(filename: str = None, paragraph_index: int = 0, bookmark_na
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var r = d.paragraphs[{paragraph_index}].textObject;
+var pIdx = Math.max(0, {paragraph_index} - 1);  // 1-based → 0-based
+var r = d.paragraphs[pIdx].textObject;
 app.make({{new: "bookmark", at: d, withProperties: {{name: "{escaped_name}", bookmarkRange: r}}}});
 JSON.stringify({{added: true, name: "{escaped_name}"}});
 """)
