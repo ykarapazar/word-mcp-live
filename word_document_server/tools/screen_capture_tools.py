@@ -72,6 +72,10 @@ async def word_screen_capture(filename: str = None, output_path: str = None) -> 
     Returns:
         JSON with path, dimensions, and document name.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_screen_capture
+        return mac_screen_capture(filename=filename, output_path=output_path)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Screen capture is only available on Windows"})
 

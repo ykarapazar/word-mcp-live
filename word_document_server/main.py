@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
 
 # Load environment variables from .env file
-print("Loading configuration from .env file...")
+print("Loading configuration from .env file...", file=sys.stderr)
 load_dotenv()
 # Set required environment variable for FastMCP 2.8.1+
 os.environ.setdefault('FASTMCP_LOG_LEVEL', 'INFO')
@@ -54,11 +54,11 @@ def get_transport_config():
     
     # Override with environment variables if provided
     transport = os.getenv('MCP_TRANSPORT', 'stdio').lower()
-    print(f"Transport: {transport}")
+    print(f"Transport: {transport}", file=sys.stderr)
     # Validate transport type
     valid_transports = ['stdio', 'streamable-http', 'sse']
     if transport not in valid_transports:
-        print(f"Warning: Invalid transport '{transport}'. Falling back to 'stdio'.")
+        print(f"Warning: Invalid transport '{transport}'. Falling back to 'stdio'.", file=sys.stderr)
         transport = 'stdio'
     
     config['transport'] = transport
@@ -85,7 +85,7 @@ def setup_logging(debug_mode):
             level=logging.DEBUG,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
-        print("Debug logging enabled")
+        print("Debug logging enabled", file=sys.stderr)
     else:
         logging.basicConfig(
             level=logging.INFO,
@@ -1918,7 +1918,7 @@ def run_server():
     
     # Print startup information
     transport_type = config['transport']
-    print(f"Starting Word Document MCP Server with {transport_type} transport...")
+    print(f"Starting Word Document MCP Server with {transport_type} transport...", file=sys.stderr)
     
     # if config['debug']:
     #     print(f"Configuration: {config}")
@@ -1926,12 +1926,12 @@ def run_server():
     try:
         if transport_type == 'stdio':
             # Run with stdio transport (default, backward compatible)
-            print("Server running on stdio transport")
+            print("Server running on stdio transport", file=sys.stderr)
             mcp.run(transport='stdio')
             
         elif transport_type == 'streamable-http':
             # Run with streamable HTTP transport
-            print(f"Server running on streamable-http transport at http://{config['host']}:{config['port']}{config['path']}")
+            print(f"Server running on streamable-http transport at http://{config['host']}:{config['port']}{config['path']}", file=sys.stderr)
             mcp.run(
                 transport='streamable-http',
                 host=config['host'],
@@ -1941,7 +1941,7 @@ def run_server():
             
         elif transport_type == 'sse':
             # Run with SSE transport
-            print(f"Server running on SSE transport at http://{config['host']}:{config['port']}{config['sse_path']}")
+            print(f"Server running on SSE transport at http://{config['host']}:{config['port']}{config['sse_path']}", file=sys.stderr)
             mcp.run(
                 transport='sse',
                 host=config['host'],
@@ -1950,9 +1950,9 @@ def run_server():
             )
             
     except KeyboardInterrupt:
-        print("\nShutting down server...")
+        print("\nShutting down server...", file=sys.stderr)
     except Exception as e:
-        print(f"Error starting server: {e}")
+        print(f"Error starting server: {e}", file=sys.stderr)
         if config['debug']:
             import traceback
             traceback.print_exc()

@@ -8,6 +8,9 @@ management for files that are open (and locked) in Word.
 import json
 import sys
 
+# macOS JXA dispatch
+_MAC_AVAILABLE = sys.platform == 'darwin'
+
 # 1 inch = 72 points (avoid app.InchesToPoints which can fail on some COM setups)
 _PTS_PER_INCH = 72.0
 
@@ -39,6 +42,10 @@ async def word_live_set_page_layout(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_set_page_layout
+        return mac_set_page_layout(filename=filename, section_index=section_index, orientation=orientation, page_width=page_width, page_height=page_height, top_margin=top_margin, bottom_margin=bottom_margin, left_margin=left_margin, right_margin=right_margin)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
@@ -117,6 +124,10 @@ async def word_live_add_header_footer(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_add_header_footer
+        return mac_add_header_footer(filename=filename, section_index=section_index, header_text=header_text, footer_text=footer_text, alignment=alignment)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
@@ -189,6 +200,9 @@ async def word_live_add_page_numbers(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        return json.dumps({"error": "word_live_add_page_numbers is not yet implemented on macOS"})
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
@@ -274,6 +288,10 @@ async def word_live_add_section_break(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_add_section_break
+        return mac_add_section_break(filename=filename, break_type=break_type)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
@@ -348,6 +366,10 @@ async def word_live_set_paragraph_spacing(
     Returns:
         JSON with count of affected paragraphs.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_set_paragraph_spacing
+        return mac_set_paragraph_spacing(filename=filename, paragraph_index=paragraph_index, start_paragraph=start_paragraph, end_paragraph=end_paragraph, space_before=space_before, space_after=space_after, line_spacing=line_spacing, keep_with_next=keep_with_next, keep_together=keep_together, alignment=alignment)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
@@ -428,6 +450,10 @@ async def word_live_add_bookmark(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_add_bookmark
+        return mac_add_bookmark(filename=filename, paragraph_index=paragraph_index, bookmark_name=bookmark_name)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
@@ -481,6 +507,9 @@ async def word_live_add_watermark(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        return json.dumps({"error": "word_live_add_watermark is not yet implemented on macOS"})
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 

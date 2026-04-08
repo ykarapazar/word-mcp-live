@@ -11,6 +11,9 @@ import time
 from difflib import SequenceMatcher
 
 from word_document_server.defaults import DEFAULT_AUTHOR
+# macOS JXA dispatch
+_MAC_AVAILABLE = __import__('sys').platform == 'darwin'
+
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +67,15 @@ async def word_live_take_snapshot(filename: str = None) -> str:
     Returns:
         JSON confirmation with paragraph count and timestamp.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_get_text
+        import json as _json
+        result = _json.loads(mac_get_text(filename=filename))
+        paras = [{"index": p["index"] + 1, "text": p["text"].rstrip("\r\x07")} for p in result["paragraphs"]]
+        doc_name = (filename or "active").lower()
+        _paragraph_snapshots[doc_name] = {"timestamp": time.time(), "paragraphs": paras}
+        return _json.dumps({"success": True, "document": filename or "active", "paragraph_count": len(paras), "snapshot_timestamp": _paragraph_snapshots[doc_name]["timestamp"], "message": "Snapshot stored. Use word_live_get_diff to see changes."}, ensure_ascii=False)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -245,6 +257,10 @@ async def word_live_get_text(filename: str = None) -> str:
     Returns:
         JSON with paragraphs list.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_get_text
+        return mac_get_text(filename=filename)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -317,6 +333,10 @@ async def word_live_get_paragraph_format(
     Returns:
         JSON with formatting details per paragraph.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_get_paragraph_format
+        return mac_get_paragraph_format(filename=filename, start_paragraph=start_paragraph, end_paragraph=end_paragraph, include_runs=include_runs)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -442,6 +462,10 @@ async def word_live_get_info(filename: str = None) -> str:
     Returns:
         JSON with document metadata (pages, words, paragraphs, sections, etc.).
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_get_info
+        return mac_get_info(filename=filename)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -514,6 +538,10 @@ async def word_live_find_text(
     Returns:
         JSON with list of matches (position, context).
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_find_text
+        return mac_find_text(filename=filename, search_text=search_text, match_case=match_case, whole_word=whole_word, use_wildcards=use_wildcards, context_chars=context_chars, max_results=max_results)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -579,6 +607,10 @@ async def word_live_get_comments(filename: str = None) -> str:
     Returns:
         JSON with list of comments (author, date, text, scope).
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_get_comments
+        return mac_get_comments(filename=filename)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -658,6 +690,10 @@ async def word_live_add_comment(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_add_comment
+        return mac_add_comment(filename=filename, start=start, end=end, paragraph_index=paragraph_index, text=text, author=author)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -725,6 +761,9 @@ async def word_live_reply_to_comment(
     Returns:
         JSON with reply info.
     """
+    if _MAC_AVAILABLE:
+        return json.dumps({"error": "word_live_reply_to_comment is not available on macOS — the AppleScript dictionary does not expose this feature"})
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -789,6 +828,9 @@ async def word_live_resolve_comment(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        return json.dumps({"error": "word_live_resolve_comment is not available on macOS — the AppleScript dictionary does not expose this feature"})
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -849,6 +891,10 @@ async def word_live_delete_comment(
     Returns:
         JSON with result info.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_delete_comment
+        return mac_delete_comment(filename=filename, comment_index=comment_index)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -893,6 +939,10 @@ async def word_live_list_revisions(filename: str = None) -> str:
     Returns:
         JSON with list of revisions (type, author, date, text).
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_list_revisions
+        return mac_list_revisions(filename=filename)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -964,6 +1014,10 @@ async def word_live_accept_revisions(
     Returns:
         JSON with count of accepted revisions.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_accept_revisions
+        return mac_accept_revisions(filename=filename, author=author, revision_ids=revision_ids)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -1032,6 +1086,10 @@ async def word_live_reject_revisions(
     Returns:
         JSON with count of rejected revisions.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_reject_revisions
+        return mac_reject_revisions(filename=filename, author=author, revision_ids=revision_ids)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -1103,6 +1161,10 @@ async def word_live_get_page_text(
     Returns:
         JSON with paragraphs list, each containing index, text, char_start, char_end.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_get_page_text
+        return mac_get_page_text(filename=filename, page=page, end_page=end_page)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -1197,6 +1259,9 @@ async def word_live_get_undo_history(
     Returns:
         JSON with undo_entries list (most recent first) and count.
     """
+    if _MAC_AVAILABLE:
+        return json.dumps({"error": "word_live_get_undo_history is not available on macOS — the AppleScript dictionary does not expose this feature"})
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -1258,6 +1323,10 @@ async def word_live_diagnose_layout(
     Returns:
         JSON with issues array, style_summary dict, and issue_count.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_diagnose_layout
+        return mac_diagnose_layout(filename=filename)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -1389,6 +1458,10 @@ async def word_live_list_open() -> str:
     Returns JSON with list of open documents including name, full_path,
     pages, saved status, and whether it is the active document.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac import mac_list_open
+        return mac_list_open()
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
