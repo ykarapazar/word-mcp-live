@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-04-08
+
+### Fixed
+- `word_live_replace_text` — infinite loop when wildcard pattern matches zero-length strings (e.g., `*` alone); now skips forward on zero-length matches and enforces 50K replacement safety ceiling
+
 ## [1.5.0] - 2026-04-08
 
 ### Added
@@ -112,6 +117,7 @@ These 4 tools require Windows COM APIs with no AppleScript/JXA equivalent:
 - Document management, content editing, formatting, tables, extraction
 - FastMCP server with stdio transport
 
+[1.5.1]: https://github.com/ykarapazar/word-mcp-live/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/ykarapazar/word-mcp-live/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/ykarapazar/word-mcp-live/compare/v1.4.0...v1.4.1
 [1.3.0]: https://github.com/ykarapazar/word-mcp-live/compare/v1.2.0...v1.3.0

@@ -847,6 +847,7 @@ async def word_live_replace_text(
 
             try:
                 count = 0
+                MAX_REPLACEMENTS = 50_000  # safety ceiling
                 rng = doc.Content.Duplicate
                 rng.Find.ClearFormatting()
 
@@ -861,12 +862,19 @@ async def word_live_replace_text(
                     )
                     if not found:
                         break
+                    # Guard: zero-length match → skip forward 1 char to avoid infinite loop
+                    if rng.Start == rng.End:
+                        rng.Start = rng.Start + 1
+                        rng.End = doc.Content.End
+                        continue
                     # Convert Word special characters to actual characters for rng.Text assignment
                     # (rng.Text doesn't interpret ^p/^t/^m like Find.Execute Replace does)
                     processed = replace_text.replace("^p", "\r").replace("^t", "\t").replace("^m", "\x0c").replace("^s", "\u00a0")
                     rng.Text = processed
                     count += 1
                     if not replace_all:
+                        break
+                    if count >= MAX_REPLACEMENTS:
                         break
                     rng.Collapse(0)  # wdCollapseEnd — move past replacement
             finally:
