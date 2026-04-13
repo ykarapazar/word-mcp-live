@@ -248,7 +248,11 @@ JSON.stringify({{paragraphs: result, count: result.length}});
 
 
 def mac_get_page_text(filename: str = None, page: int = 1, end_page: int = None) -> str:
-    """Get text from a specific page range."""
+    """Get text from a specific page range.
+
+    Uses paragraph iteration with getRangeInformation to determine page numbers,
+    since goTo/createRange APIs are unreliable in JXA.
+    """
     finder = _doc_finder_js(filename)
     ep = end_page or page
     return _run_jxa(f"""
@@ -256,23 +260,27 @@ var app = Application("Microsoft Word");
 {finder}
 var totalPages = parseInt(app.getRangeInformation(d.textObject, {{informationType: "number of pages in document"}}));
 if ({page} > totalPages) throw new Error("Page {page} exceeds document (" + totalPages + " pages)");
-var results = [];
-for (var p = {page}; p <= Math.min({ep}, totalPages); p++) {{
-    // Navigate to page
-    var r = app.goTo(d.content, {{what: "go to page", which: "go to absolute", count: p}});
-    var startPos = r.startOfContent();
-    var endPos;
-    if (p < totalPages) {{
-        var r2 = app.goTo(d.content, {{what: "go to page", which: "go to absolute", count: p + 1}});
-        endPos = r2.startOfContent();
-    }} else {{
-        endPos = d.textObject.endOfContent();
+var paras = d.paragraphs();
+var result = [];
+var started = false;
+for (var i = 0; i < paras.length; i++) {{
+    var pText = paras[i].textObject;
+    var pageNum = parseInt(app.getRangeInformation(pText, {{informationType: "active end page number"}}));
+    if (pageNum >= {page} && pageNum <= {ep}) {{
+        started = true;
+        result.push({{
+            index: i,
+            text: pText.content(),
+            char_start: pText.startOfContent(),
+            char_end: pText.endOfContent(),
+            page: pageNum
+        }});
+    }} else if (started && pageNum > {ep}) {{
+        break;
     }}
-    var pageRange = d.createRange({{start: startPos, end: endPos}});
-    results.push({{page: p, text: pageRange.content()}});
 }}
-JSON.stringify({{pages: results, totalPages: totalPages}});
-""")
+JSON.stringify({{paragraphs: result, count: result.length, page: {page}, end_page: {ep}, total_pages: totalPages}});
+""", timeout=60)
 
 
 def mac_find_text(
