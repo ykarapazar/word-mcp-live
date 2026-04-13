@@ -250,36 +250,68 @@ JSON.stringify({{paragraphs: result, count: result.length}});
 def mac_get_page_text(filename: str = None, page: int = 1, end_page: int = None) -> str:
     """Get text from a specific page range.
 
-    Uses paragraph iteration with getRangeInformation to determine page numbers,
-    since goTo/createRange APIs are unreliable in JXA.
+    Uses binary search with createRange + getRangeInformation to find page
+    boundaries, then iterates paragraphs by char position. Much faster than
+    calling getRangeInformation per paragraph.
     """
     finder = _doc_finder_js(filename)
     ep = end_page or page
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
+var totalEnd = d.textObject.endOfContent();
 var totalPages = parseInt(app.getRangeInformation(d.textObject, {{informationType: "number of pages in document"}}));
 if ({page} > totalPages) throw new Error("Page {page} exceeds document (" + totalPages + " pages)");
+var ep = Math.min({ep}, totalPages);
+
+// Binary search for the char position where a given page starts
+function findPageStart(pg) {{
+    if (pg <= 1) return 0;
+    if (pg > totalPages) return totalEnd;
+    var lo = 0, hi = totalEnd;
+    while (lo < hi) {{
+        var mid = Math.floor((lo + hi) / 2);
+        var r = app.createRange(d, {{start: mid, end: Math.min(mid + 1, totalEnd)}});
+        var pn = parseInt(app.getRangeInformation(r, {{informationType: "active end page number"}}));
+        if (pn < pg) lo = mid + 1;
+        else hi = mid;
+    }}
+    return lo;
+}}
+
+// Find char boundaries for requested page range
+var rangeStart = findPageStart({page});
+var rangeEnd = (ep >= totalPages) ? totalEnd : findPageStart(ep + 1);
+
+// Build page boundary lookup for assigning page numbers to paragraphs
+var pageBounds = [];
+for (var pg = {page}; pg <= ep; pg++) {{
+    pageBounds.push({{page: pg, start: findPageStart(pg)}});
+}}
+
+// Collect paragraphs within the char range
 var paras = d.paragraphs();
 var result = [];
-var started = false;
 for (var i = 0; i < paras.length; i++) {{
     var pText = paras[i].textObject;
-    var pageNum = parseInt(app.getRangeInformation(pText, {{informationType: "active end page number"}}));
-    if (pageNum >= {page} && pageNum <= {ep}) {{
-        started = true;
-        result.push({{
-            index: i,
-            text: pText.content(),
-            char_start: pText.startOfContent(),
-            char_end: pText.endOfContent(),
-            page: pageNum
-        }});
-    }} else if (started && pageNum > {ep}) {{
-        break;
+    var ps = pText.startOfContent();
+    if (ps >= rangeEnd) break;
+    var pe = pText.endOfContent();
+    if (pe <= rangeStart) continue;
+    // Determine which page this paragraph is on
+    var paraPage = {page};
+    for (var b = pageBounds.length - 1; b >= 0; b--) {{
+        if (ps >= pageBounds[b].start) {{ paraPage = pageBounds[b].page; break; }}
     }}
+    result.push({{
+        index: i,
+        text: pText.content(),
+        char_start: ps,
+        char_end: pe,
+        page: paraPage
+    }});
 }}
-JSON.stringify({{paragraphs: result, count: result.length, page: {page}, end_page: {ep}, total_pages: totalPages}});
+JSON.stringify({{paragraphs: result, count: result.length, page: {page}, end_page: ep, total_pages: totalPages}});
 """, timeout=60)
 
 
