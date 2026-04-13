@@ -251,8 +251,8 @@ def mac_get_page_text(filename: str = None, page: int = 1, end_page: int = None)
     """Get text from a specific page range.
 
     Uses binary search with createRange + getRangeInformation to find page
-    boundaries, then iterates paragraphs by char position. Much faster than
-    calling getRangeInformation per paragraph.
+    boundaries efficiently (O(log N) IPC calls per boundary). Returns one
+    entry per page with text content and char offsets.
     """
     finder = _doc_finder_js(filename)
     ep = end_page or page
@@ -264,7 +264,6 @@ var totalPages = parseInt(app.getRangeInformation(d.textObject, {{informationTyp
 if ({page} > totalPages) throw new Error("Page {page} exceeds document (" + totalPages + " pages)");
 var ep = Math.min({ep}, totalPages);
 
-// Binary search for the char position where a given page starts
 function findPageStart(pg) {{
     if (pg <= 1) return 0;
     if (pg > totalPages) return totalEnd;
@@ -279,39 +278,19 @@ function findPageStart(pg) {{
     return lo;
 }}
 
-// Find char boundaries for requested page range
-var rangeStart = findPageStart({page});
-var rangeEnd = (ep >= totalPages) ? totalEnd : findPageStart(ep + 1);
-
-// Build page boundary lookup for assigning page numbers to paragraphs
-var pageBounds = [];
+var pages = [];
 for (var pg = {page}; pg <= ep; pg++) {{
-    pageBounds.push({{page: pg, start: findPageStart(pg)}});
-}}
-
-// Collect paragraphs within the char range
-var paras = d.paragraphs();
-var result = [];
-for (var i = 0; i < paras.length; i++) {{
-    var pText = paras[i].textObject;
-    var ps = pText.startOfContent();
-    if (ps >= rangeEnd) break;
-    var pe = pText.endOfContent();
-    if (pe <= rangeStart) continue;
-    // Determine which page this paragraph is on
-    var paraPage = {page};
-    for (var b = pageBounds.length - 1; b >= 0; b--) {{
-        if (ps >= pageBounds[b].start) {{ paraPage = pageBounds[b].page; break; }}
-    }}
-    result.push({{
-        index: i,
-        text: pText.content(),
-        char_start: ps,
-        char_end: pe,
-        page: paraPage
+    var pStart = findPageStart(pg);
+    var pEnd = (pg >= totalPages) ? totalEnd : findPageStart(pg + 1);
+    var pageRange = app.createRange(d, {{start: pStart, end: pEnd}});
+    pages.push({{
+        page: pg,
+        text: pageRange.content(),
+        char_start: pStart,
+        char_end: pEnd
     }});
 }}
-JSON.stringify({{paragraphs: result, count: result.length, page: {page}, end_page: ep, total_pages: totalPages}});
+JSON.stringify({{pages: pages, count: pages.length, page: {page}, end_page: ep, total_pages: totalPages}});
 """, timeout=60)
 
 
