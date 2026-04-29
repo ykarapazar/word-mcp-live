@@ -4,6 +4,8 @@ import json
 import os
 import sys
 
+_MAC_AVAILABLE = sys.platform == 'darwin'
+
 
 def _capture_window_to_png(hwnd: int) -> bytes:
     """Capture a window using PrintWindow and return PNG bytes.
