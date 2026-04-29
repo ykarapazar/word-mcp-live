@@ -60,6 +60,15 @@ async def word_live_insert_text(
         # MCP/JSON sends backslash-r as 2 chars; Word COM needs chr(13) for paragraph marks.
         text = text.replace("\\r\\n", "\r").replace("\\r", "\r").replace("\\n", "\r")
 
+        # Reject control bytes (notably \x07 cell separator) — inserting
+        # these outside a real table creates invalid document state that
+        # subsequent Find/Replace and table operations cannot recover from.
+        from word_document_server.utils.text_safety import reject_control_chars
+        try:
+            reject_control_chars("text", text)
+        except ValueError as e:
+            return json.dumps({"error": str(e)})
+
         with undo_record(app, "MCP: Insert Text"):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
@@ -585,11 +594,16 @@ async def word_live_setup_heading_numbering(
                 line_spacing,
             ])
 
+            # These need to be defined unconditionally so the
+            # _apply_direct_formatting closure (defined further down)
+            # can reference them safely even when has_style_params=False.
+            align_val = None
+            color_int = None
+
             if has_style_params:
                 align_map = {"left": 0, "center": 1, "right": 2, "justify": 3}
                 align_val = align_map.get(alignment.lower()) if alignment else None
 
-                color_int = None
                 if font_color:
                     c = font_color.lstrip("#")
                     r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
@@ -663,6 +677,7 @@ async def word_live_setup_heading_numbering(
             # --- Apply styles to paragraphs ---
             h1_applied = 0
             h2_applied = 0
+            restyle_failures = []
 
             all_heading_paras = []
             for idx in (h1_paragraphs or []):
@@ -672,36 +687,126 @@ async def word_live_setup_heading_numbering(
             all_heading_paras.sort(key=lambda x: x[0])
 
             target_style = {-2: doc.Styles(-2), -3: doc.Styles(-3)}
+            target_label = {-2: "Heading 1", -3: "Heading 2"}
+
+            def _apply_direct_formatting(rng, sid):
+                """When has_style_params is True, mirror the heading-style
+                customizations onto the range itself — this defeats any
+                direct formatting inherited from a custom template style
+                (e.g. "Font Style30/31") that would otherwise override the
+                newly assigned Heading 1/2 style."""
+                if not has_style_params:
+                    return
+                try:
+                    if font_name is not None:
+                        rng.Font.Name = font_name
+                    size = h1_size if sid == -2 else h2_size
+                    if size is not None:
+                        rng.Font.Size = size
+                    if bold is not None:
+                        rng.Font.Bold = bold
+                        rng.Font.Italic = False
+                    if color_int is not None:
+                        rng.Font.Color = color_int
+                    if align_val is not None:
+                        rng.ParagraphFormat.Alignment = align_val
+                    sp_b = h1_space_before if sid == -2 else h2_space_before
+                    sp_a = h1_space_after if sid == -2 else h2_space_after
+                    if sp_b is not None:
+                        rng.ParagraphFormat.SpaceBefore = sp_b
+                    if sp_a is not None:
+                        rng.ParagraphFormat.SpaceAfter = sp_a
+                    if line_spacing is not None:
+                        rng.ParagraphFormat.LineSpacingRule = 5  # multiple
+                        rng.ParagraphFormat.LineSpacing = line_spacing
+                except Exception:
+                    pass  # best-effort
 
             for para_idx, style_id in all_heading_paras:
                 if para_idx < 1 or para_idx > doc.Paragraphs.Count:
+                    restyle_failures.append({
+                        "index": para_idx, "error": "out of range"
+                    })
                     continue
                 para = doc.Paragraphs(para_idx)
+                # Capture the style we are about to overwrite, for diagnostics.
+                try:
+                    old_style = para.Style.NameLocal
+                except Exception:
+                    old_style = None
                 text = para.Range.Text.rstrip("\r\x07")
                 range_len = para.Range.End - para.Range.Start
                 text_len = len(text)
                 inflated = (range_len > text_len + 5)
 
+                applied_via = None
                 if not inflated:
                     # Normal paragraph — direct style assignment works.
                     try:
                         para.Range.ListFormat.RemoveNumbers()
                     except Exception:
                         pass
-                    para.Style = target_style[style_id]
+                    try:
+                        para.Range.Style = target_style[style_id]
+                        _apply_direct_formatting(para.Range, style_id)
+                        applied_via = "para.Range.Style"
+                    except Exception as e:
+                        restyle_failures.append({
+                            "index": para_idx,
+                            "old_style": old_style,
+                            "error": f"para.Range.Style assign failed: {e}",
+                        })
+                        continue
                 else:
                     # Inflated Range (comments/fields extend it beyond text).
                     # Use Find to locate text, then Expand to full paragraph
                     # so the paragraph mark gets the style.
                     found = _find_para_text(doc, text)
-                    if found:
-                        try:
-                            found.ListFormat.RemoveNumbers()
-                        except Exception:
-                            pass
+                    if not found:
+                        restyle_failures.append({
+                            "index": para_idx,
+                            "old_style": old_style,
+                            "error": "inflated range and Find could not locate text",
+                        })
+                        continue
+                    try:
+                        found.ListFormat.RemoveNumbers()
+                    except Exception:
+                        pass
+                    try:
                         # Expand found range to full paragraph (includes \r mark)
                         found.Expand(Unit=4)  # wdParagraph
                         found.Style = target_style[style_id]
+                        _apply_direct_formatting(found, style_id)
+                        applied_via = "find+expand.Style"
+                    except Exception as e:
+                        restyle_failures.append({
+                            "index": para_idx,
+                            "old_style": old_style,
+                            "error": f"find+expand.Style assign failed: {e}",
+                        })
+                        continue
+
+                # Verify the style actually took effect; some custom
+                # template styles refuse to be overwritten silently.
+                try:
+                    new_style = para.Style.NameLocal
+                except Exception:
+                    new_style = None
+                expected = target_label[style_id]
+                if new_style and new_style != expected:
+                    restyle_failures.append({
+                        "index": para_idx,
+                        "old_style": old_style,
+                        "post_style": new_style,
+                        "expected": expected,
+                        "applied_via": applied_via,
+                        "error": (
+                            "style assignment did not stick — paragraph "
+                            "still reports a different style. Direct "
+                            "formatting was applied as fallback."
+                        ),
+                    })
 
                 if style_id == -2:
                     h1_applied += 1
@@ -764,6 +869,7 @@ async def word_live_setup_heading_numbering(
             "h1_applied": h1_applied,
             "h2_applied": h2_applied,
             "stripped": stripped,
+            "restyle_failures": restyle_failures,
         })
 
     except Exception as e:
@@ -819,6 +925,15 @@ async def word_live_replace_text(
             "error": f"replace_text is {len(replace_text)} chars (Word limit: 255). "
             "Break into smaller find/replace pairs."
         })
+
+    # Reject control bytes (notably \x07 cell separator) that can corrupt
+    # Find/Replace and have historically caused full-document data loss.
+    from word_document_server.utils.text_safety import reject_control_chars
+    try:
+        reject_control_chars("find_text", find_text)
+        reject_control_chars("replace_text", replace_text)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
 
     if replace_all and track_changes:
         return json.dumps({
@@ -1071,9 +1186,47 @@ async def word_live_add_table(
         else:
             try:
                 offset = int(position)
-                rng = doc.Range(offset, offset)
             except ValueError:
                 return json.dumps({"error": f"Invalid position: {position}"})
+
+            # Reject offsets that would land the new table inside an
+            # existing table's range — Word would silently merge the
+            # new structure into the old, breaking both.
+            for t in doc.Tables:
+                try:
+                    ts, te = t.Range.Start, t.Range.End
+                except Exception:
+                    continue
+                if ts <= offset <= te:
+                    return json.dumps({
+                        "error": (
+                            f"position offset {offset} falls within an existing "
+                            f"table at range [{ts}, {te}]. Choose an offset "
+                            f"outside any table, or use position='end'/'start'."
+                        )
+                    })
+
+            # Reject offsets immediately after an orphan cell separator
+            # (residue from a prior Table.Delete with scrub disabled);
+            # adding a table at such a point fuses it with the residue.
+            if offset > 0:
+                try:
+                    probe = doc.Range(offset - 1, offset).Text or ""
+                except Exception:
+                    probe = ""
+                if probe == "\x07":
+                    return json.dumps({
+                        "error": (
+                            f"position offset {offset} sits immediately after "
+                            f"an orphan cell separator (\\x07). Run "
+                            f"word_live_modify_table operation='delete_table' "
+                            f"with scrub_orphans=True (the default) on the "
+                            f"prior table, or use word_live_diagnose_layout "
+                            f"to locate and clean separators."
+                        )
+                    })
+
+            rng = doc.Range(offset, offset)
 
         with undo_record(app, "MCP: Add Table"):
             prev_tracking = doc.TrackRevisions
@@ -1409,6 +1562,7 @@ async def word_live_modify_table(
     autofit_mode: str = "content",
     accept_revisions: bool = False,
     track_changes: bool = False,
+    scrub_orphans: bool = True,
 ) -> str:
     """[Windows only] Modify a table in an open Word document.
 
@@ -1437,6 +1591,8 @@ async def word_live_modify_table(
         accept_revisions: For set_cell/set_row/set_range — accept tracked changes before writing
             (prevents layered text from old revisions persisting underneath new content).
         track_changes: Track modifications as revisions.
+        scrub_orphans: For delete_table — scan the deletion site for orphan
+            cell-separator (\\x07) bytes and remove them. Default True.
 
     Returns:
         JSON with operation result.
@@ -1455,11 +1611,27 @@ async def word_live_modify_table(
         app = get_word_app()
         doc = find_document(app, filename)
 
-        if doc.Tables.Count == 0:
+        # Per-call validation: re-read Tables.Count fresh in case a prior
+        # MCP call (especially delete_table) reduced or zeroed the count.
+        try:
+            table_count = doc.Tables.Count
+        except Exception as e:
+            return json.dumps({
+                "error": f"could not enumerate document tables: {e}"
+            })
+
+        if table_count == 0:
             return json.dumps({"error": "Document has no tables"})
 
-        if table_index < 1 or table_index > doc.Tables.Count:
-            return json.dumps({"error": f"table_index {table_index} out of range (1-{doc.Tables.Count})"})
+        if not (1 <= table_index <= table_count):
+            return json.dumps({
+                "error": (
+                    f"table_index {table_index} out of range. Document has "
+                    f"{table_count} table(s) (valid range: 1..{table_count}). "
+                    f"If a prior delete_table reduced the count, call "
+                    f"word_live_get_info to refresh."
+                )
+            })
 
         table = doc.Tables(table_index)
         op = operation.lower()
@@ -1525,7 +1697,7 @@ async def word_live_modify_table(
                     result = table_com.autofit(table, autofit_mode)
 
                 elif op == "delete_table":
-                    result = table_com.delete_table(table)
+                    result = table_com.delete_table(table, scrub_orphans=scrub_orphans)
 
                 else:
                     return json.dumps({

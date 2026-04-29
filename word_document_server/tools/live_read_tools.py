@@ -548,51 +548,87 @@ async def word_live_find_text(
     if not search_text:
         return json.dumps({"error": "search_text is required"})
 
+    # Same control-byte hazard as replace_text: \x07 and other control
+    # bytes corrupt Word's Find engine. Reject before issuing Find.Execute.
+    from word_document_server.utils.text_safety import reject_control_chars
+    try:
+        reject_control_chars("search_text", search_text)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+
     try:
         from word_document_server.core.word_com import get_word_app, find_document
 
         app = get_word_app()
         doc = find_document(app, filename)
 
+        # COM-marshalling can fail intermittently after MCP reconnect on
+        # property access (rng.Text, doc.Name). Wrap each access so a
+        # single hiccup yields a partial result rather than aborting.
+        def _safe_attr(obj, attr, default=None):
+            try:
+                return getattr(obj, attr)
+            except Exception:
+                return default
+
         matches = []
+        partial_errors = []
         rng = doc.Content.Duplicate
         rng.Find.ClearFormatting()
 
         while len(matches) < max_results:
-            found = rng.Find.Execute(
-                FindText=search_text,
-                MatchCase=match_case,
-                MatchWholeWord=whole_word if not use_wildcards else False,
-                MatchWildcards=use_wildcards,
-                Forward=True,
-                Wrap=0,  # wdFindStop
-            )
+            try:
+                found = rng.Find.Execute(
+                    FindText=search_text,
+                    MatchCase=match_case,
+                    MatchWholeWord=whole_word if not use_wildcards else False,
+                    MatchWildcards=use_wildcards,
+                    Forward=True,
+                    Wrap=0,  # wdFindStop
+                )
+            except Exception as e:
+                partial_errors.append(f"Find.Execute failed: {e}")
+                break
             if not found:
                 break
 
-            # Get surrounding context
-            context_rng = rng.Duplicate
-            context_start = max(0, rng.Start - context_chars)
-            context_end = min(doc.Content.End, rng.End + context_chars)
-            context_rng.SetRange(context_start, context_end)
+            match_start = _safe_attr(rng, "Start", -1)
+            match_end = _safe_attr(rng, "End", -1)
+
+            try:
+                context_rng = rng.Duplicate
+                content_end = _safe_attr(doc.Content, "End", match_end)
+                context_start = max(0, match_start - context_chars) if match_start >= 0 else 0
+                context_end = min(content_end, match_end + context_chars) if match_end >= 0 else context_chars
+                context_rng.SetRange(context_start, context_end)
+                context_text = _safe_attr(context_rng, "Text", "<unreadable>")
+            except Exception as e:
+                context_text = f"<context unavailable: {e}>"
 
             matches.append({
-                "start": rng.Start,
-                "end": rng.End,
-                "text": rng.Text,
-                "context": context_rng.Text,
+                "start": match_start,
+                "end": match_end,
+                "text": _safe_attr(rng, "Text", "<unreadable>"),
+                "context": context_text,
             })
 
-            # Move past current match
-            rng.SetRange(rng.End, doc.Content.End)
+            # Move past current match — guard against transient COM failures
+            try:
+                rng.SetRange(match_end if match_end >= 0 else rng.End, doc.Content.End)
+            except Exception as e:
+                partial_errors.append(f"advance past match failed: {e}")
+                break
 
-        return json.dumps({
+        result = {
             "success": True,
-            "document": doc.Name,
+            "document": _safe_attr(doc, "Name", "<unknown>"),
             "search_text": search_text,
             "match_count": len(matches),
             "matches": matches,
-        }, ensure_ascii=False)
+        }
+        if partial_errors:
+            result["partial_errors"] = partial_errors
+        return json.dumps(result, ensure_ascii=False)
 
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -1452,6 +1488,100 @@ async def word_live_diagnose_layout(
         return json.dumps({"error": str(e)})
 
 
+_CORE_PROP_MAP = {
+    "title": "Title",
+    "subject": "Subject",
+    "author": "Author",
+    "keywords": "Keywords",
+    "comments": "Comments",
+    "category": "Category",
+    "manager": "Manager",
+    "company": "Company",
+    "last_author": "Last Author",
+}
+
+
+async def word_live_set_core_properties(
+    filename: str = None,
+    title: str = None,
+    subject: str = None,
+    author: str = None,
+    keywords: str = None,
+    comments: str = None,
+    category: str = None,
+    manager: str = None,
+    company: str = None,
+    last_author: str = None,
+) -> str:
+    """[Windows only] Set Word document core/built-in properties (Title, Subject, Author, etc.).
+
+    Equivalent to File > Info > Properties in the Word UI. Pass None for any
+    field to leave it unchanged. Wrapped in undo_record so a single Ctrl+Z
+    reverts every property in the call.
+
+    Args:
+        filename: Document name or path (None = active document).
+        title: Document Title.
+        subject: Document Subject.
+        author: Author (current author / "Created by").
+        keywords: Keywords (semicolon-separated by Word convention).
+        comments: Free-form Comments.
+        category: Category.
+        manager: Manager.
+        company: Company.
+        last_author: "Last Author" (Last saved by).
+
+    Returns:
+        JSON {ok, document, changed: {field: {old, new}}, errors: {field: msg}}.
+    """
+    if sys.platform != "win32":
+        return json.dumps({"error": "Live tools are only available on Windows"})
+
+    try:
+        from word_document_server.core.word_com import (
+            get_word_app, find_document, undo_record,
+        )
+
+        app = get_word_app()
+        doc = find_document(app, filename)
+
+        inputs = {
+            "title": title, "subject": subject, "author": author,
+            "keywords": keywords, "comments": comments, "category": category,
+            "manager": manager, "company": company, "last_author": last_author,
+        }
+
+        changes: dict = {}
+        errors: dict = {}
+
+        with undo_record(app, "MCP: Set Core Properties"):
+            props = doc.BuiltInDocumentProperties
+            for key, value in inputs.items():
+                if value is None:
+                    continue
+                prop_name = _CORE_PROP_MAP[key]
+                try:
+                    raw_old = props(prop_name).Value
+                    old = str(raw_old) if raw_old is not None else None
+                except Exception:
+                    old = None
+                try:
+                    props(prop_name).Value = value
+                    changes[key] = {"old": old, "new": value}
+                except Exception as e:
+                    errors[key] = str(e)
+
+        return json.dumps({
+            "ok": len(errors) == 0,
+            "document": doc.Name,
+            "changed": changes,
+            "errors": errors or None,
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 async def word_live_list_open() -> str:
     """[Windows only] List all documents currently open in Microsoft Word.
 
@@ -1469,22 +1599,64 @@ async def word_live_list_open() -> str:
         from word_document_server.core.word_com import get_word_app
 
         app = get_word_app()
-        active_fullname = app.ActiveDocument.FullName if app.Documents.Count > 0 else None
+
+        # ActiveDocument access can throw on broken/proxy state — degrade gracefully.
+        try:
+            active_fullname = app.ActiveDocument.FullName if app.Documents.Count > 0 else None
+        except Exception:
+            active_fullname = None
+
+        try:
+            count = app.Documents.Count
+        except Exception as e:
+            return json.dumps({
+                "error": f"could not enumerate Documents collection: {e}",
+                "documents": [],
+            })
 
         documents = []
-        for i in range(1, app.Documents.Count + 1):
-            doc = app.Documents(i)
+        for i in range(1, count + 1):
+            entry = {"index": i}
             try:
-                pages = doc.ComputeStatistics(2)  # wdStatisticPages
+                doc = app.Documents(i)
+            except Exception as e:
+                entry.update({
+                    "name": "<unavailable>",
+                    "error": f"could not access Documents({i}): {e}",
+                })
+                documents.append(entry)
+                continue
+
+            # Defensive per-property access — one broken doc must not
+            # block reporting on healthy ones. Each failure is recorded
+            # under entry["errors"] but does not abort the loop.
+            errors = []
+
+            def _get(attr, transform=None):
+                try:
+                    val = getattr(doc, attr)
+                    return transform(val) if transform else val
+                except Exception as ex:
+                    errors.append(f"{attr}: {ex}")
+                    return None
+
+            entry["name"] = _get("Name")
+            entry["full_path"] = _get("FullName")
+            entry["saved"] = _get("Saved", bool)
+            entry["track_revisions"] = _get("TrackRevisions", bool)
+
+            try:
+                entry["pages"] = doc.ComputeStatistics(2)  # wdStatisticPages
             except Exception:
-                pages = None
-            documents.append({
-                "name": doc.Name,
-                "full_path": doc.FullName,
-                "pages": pages,
-                "saved": doc.Saved,
-                "active": doc.FullName == active_fullname,
-            })
+                entry["pages"] = None
+
+            entry["active"] = (
+                active_fullname is not None
+                and entry.get("full_path") == active_fullname
+            )
+            if errors:
+                entry["errors"] = errors
+            documents.append(entry)
 
         return json.dumps({
             "success": True,

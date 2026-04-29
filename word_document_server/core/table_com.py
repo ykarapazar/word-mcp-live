@@ -222,12 +222,62 @@ def set_range(table, data, start_row=1, start_col=1, accept_revisions=False):
     }
 
 
-def delete_table(table):
-    """Delete the entire table object from the document."""
+def delete_table(table, scrub_orphans: bool = True):
+    """Delete the entire table object from the document.
+
+    Args:
+        table: Word.Table COM object to delete.
+        scrub_orphans: After deletion, scan a small window around the
+            former table location and remove any orphan cell-separator
+            bytes (\\x07) that don't belong to a remaining table.
+            Word.Table.Delete() occasionally leaves these behind, and
+            they corrupt subsequent Find/Replace and add_table calls.
+    """
     rows = table.Rows.Count
     cols = table.Columns.Count
+    doc = table.Range.Document
+    start = table.Range.Start
     table.Delete()
-    return {"deleted": True, "had_rows": rows, "had_cols": cols}
+
+    scrubbed = 0
+    if scrub_orphans:
+        # Scan a 20-char window around the former table for stranded \x07
+        # bytes that are NOT inside any remaining table's range.
+        try:
+            content_end = doc.Content.End - 1
+            scan_start = max(0, start - 1)
+            scan_end = min(start + 20, content_end)
+            if scan_end > scan_start:
+                in_table_ranges = []
+                for t in doc.Tables:
+                    try:
+                        in_table_ranges.append((t.Range.Start, t.Range.End))
+                    except Exception:
+                        continue
+                window = doc.Range(scan_start, scan_end)
+                text = window.Text or ""
+                # Walk right-to-left so deletions don't shift positions of
+                # later matches we still need to find.
+                for i in range(len(text) - 1, -1, -1):
+                    if text[i] != "\x07":
+                        continue
+                    pos = scan_start + i
+                    if any(s <= pos <= e for (s, e) in in_table_ranges):
+                        continue  # belongs to a real surviving table
+                    try:
+                        doc.Range(pos, pos + 1).Delete()
+                        scrubbed += 1
+                    except Exception:
+                        pass
+        except Exception:
+            # Best-effort cleanup; never fail the delete itself.
+            pass
+    return {
+        "deleted": True,
+        "had_rows": rows,
+        "had_cols": cols,
+        "scrubbed_orphans": scrubbed,
+    }
 
 
 def _validate_cell(table, row, col):

@@ -1237,6 +1237,38 @@ def register_tools():
 
     @mcp.tool(
         annotations=ToolAnnotations(
+            title="Word Live Set Core Properties",
+            destructiveHint=True,
+        ),
+        description=live_read_tools.word_live_set_core_properties.__doc__,
+    )
+    def word_live_set_core_properties(
+        filename: str = None,
+        title: str = None,
+        subject: str = None,
+        author: str = None,
+        keywords: str = None,
+        comments: str = None,
+        category: str = None,
+        manager: str = None,
+        company: str = None,
+        last_author: str = None,
+    ):
+        return live_read_tools.word_live_set_core_properties(
+            filename=filename,
+            title=title,
+            subject=subject,
+            author=author,
+            keywords=keywords,
+            comments=comments,
+            category=category,
+            manager=manager,
+            company=company,
+            last_author=last_author,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
             title="Word Live List Open",
             readOnlyHint=True,
         ),
