@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "word-mcp-live"
-version = "1.6.1"
+version = "1.6.2"
 description = "MCP server for Microsoft Word — live editing on Windows (COM) and macOS (JXA), plus cross-platform python-docx tools"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -26,6 +26,7 @@ dependencies = [
     "docx2pdf>=0.1.8",
     "pytest>=8.4.2",
     "pywin32>=306; sys_platform == 'win32'",
+    "Pillow>=10.0.0; sys_platform == 'win32'",
 ]
 
 [project.urls]
