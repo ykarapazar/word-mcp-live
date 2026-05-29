@@ -731,6 +731,31 @@ def register_tools():
         """
         return comment_write_tools.add_comment(filename, target_text, comment_text, author, initials)
 
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Add Comment By Paragraph Index",
+            readOnlyHint=False,
+            destructiveHint=False,
+        ),
+    )
+    def add_comment_by_paragraph_index(
+        filename: str,
+        paragraph_index: int,
+        comment_text: str,
+        target_text: str = None,
+        target_start: int = None,
+        target_end: int = None,
+        author: str = DEFAULT_AUTHOR,
+        initials: str = DEFAULT_INITIALS,
+    ):
+        """Add a comment scoped to a specific document.xml paragraph index.
+        paragraph_index follows raw XML order (includes table-cell paragraphs).
+        If target_text is provided, matching is performed only within that paragraph.
+        """
+        return comment_write_tools.add_comment_by_paragraph_index(
+            filename, paragraph_index, comment_text, target_text, target_start, target_end, author, initials
+        )
+
     # Hyperlink tools
     @mcp.tool(
         annotations=ToolAnnotations(

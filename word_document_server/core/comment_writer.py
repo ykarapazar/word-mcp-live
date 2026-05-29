@@ -94,21 +94,64 @@ def _get_run_text(run: etree._Element) -> str:
     return "".join(parts)
 
 
+def _get_run_visible_text(run: etree._Element) -> str:
+    """Visible text approximation for mapping offsets across run children."""
+    parts = []
+    for child in run:
+        local = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        if local == "t" and child.text:
+            parts.append(child.text)
+        elif local == "tab":
+            parts.append("\t")
+        elif local in ("br", "cr"):
+            parts.append("\n")
+    return "".join(parts)
+
+
+def _run_is_simple_text(run: etree._Element) -> bool:
+    """True when run can be safely split by rewriting only w:t nodes."""
+    for child in run:
+        local = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        if local not in ("rPr", "t"):
+            return False
+    return True
+
+
+def _append_comment_text_run(parent: etree._Element, comment_text: str) -> None:
+    """Append comment text with real Word line breaks instead of raw newlines."""
+    text_run = etree.SubElement(parent, W("r"))
+    text_rpr = etree.SubElement(text_run, W("rPr"))
+    sz = etree.SubElement(text_rpr, W("sz"))
+    sz.set(W("val"), "20")
+    szCs = etree.SubElement(text_rpr, W("szCs"))
+    szCs.set(W("val"), "20")
+
+    lines = str(comment_text or "").splitlines()
+    if not lines:
+        lines = [""]
+    for idx, line in enumerate(lines):
+        if idx:
+            etree.SubElement(text_run, W("br"))
+        ct = etree.SubElement(text_run, W("t"))
+        ct.text = line
+        ct.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+
+
 def _find_text_in_paragraph(p: etree._Element, search_text: str):
     """Find where search_text appears across runs in a paragraph.
     Returns list of (run_element, start_offset, end_offset) or None.
     """
-    runs = [r for r in p.findall(f".//{W('r')}") if r.find(W("t")) is not None]
+    runs = [r for r in p.findall(f".//{W('r')}") if _get_run_visible_text(r)]
     if not runs:
         return None
 
     char_map = []
     for ri, run in enumerate(runs):
-        text = _get_run_text(run)
+        text = _get_run_visible_text(run)
         for ci in range(len(text)):
             char_map.append((ri, ci))
 
-    full_text = "".join(_get_run_text(r) for r in runs)
+    full_text = "".join(_get_run_visible_text(r) for r in runs)
     pos = full_text.find(search_text)
     if pos == -1:
         return None
@@ -119,11 +162,120 @@ def _find_text_in_paragraph(p: etree._Element, search_text: str):
     result = []
     for ri in range(start_ri, end_ri + 1):
         run = runs[ri]
-        run_text = _get_run_text(run)
+        run_text = _get_run_visible_text(run)
         s = start_ci if ri == start_ri else 0
         e = end_ci + 1 if ri == end_ri else len(run_text)
         result.append((run, s, e))
 
+    return result
+
+
+def _sentence_span(full_text: str, hit_start: int, hit_end: int) -> tuple[int, int]:
+    """Expand a hit range to sentence boundaries within one paragraph text."""
+    if not full_text:
+        return hit_start, hit_end
+
+    left = hit_start
+    while left > 0:
+        ch = full_text[left - 1]
+        if ch in "\r\n":
+            break
+        if ch in ".?!" and (left == hit_start or full_text[left:left + 1] in (" ", "\t", "")):
+            break
+        left -= 1
+
+    right = hit_end
+    n = len(full_text)
+    while right < n:
+        ch = full_text[right]
+        if ch in "\r\n":
+            break
+        right += 1
+        if ch in ".?!":
+            break
+
+    while left < right and full_text[left].isspace():
+        left += 1
+    while right > left and full_text[right - 1].isspace():
+        right -= 1
+    return left, right
+
+
+def _find_sentence_in_paragraph(p: etree._Element, search_text: str):
+    """
+    Find search_text in paragraph and return run slices for the containing sentence.
+    Returns list of (run_element, start_offset, end_offset) or None.
+    """
+    runs = [r for r in p.findall(f".//{W('r')}") if _get_run_visible_text(r)]
+    if not runs:
+        return None
+
+    run_texts = [_get_run_visible_text(r) for r in runs]
+    full_text = "".join(run_texts)
+    pos = full_text.find(search_text)
+    if pos == -1:
+        return None
+
+    hit_start, hit_end = pos, pos + len(search_text)
+    sent_start, sent_end = _sentence_span(full_text, hit_start, hit_end)
+    if sent_end <= sent_start:
+        sent_start, sent_end = hit_start, hit_end
+
+    char_map = []
+    for ri, txt in enumerate(run_texts):
+        for ci in range(len(txt)):
+            char_map.append((ri, ci))
+    if sent_start >= len(char_map):
+        return None
+    sent_end_clamped = min(sent_end, len(char_map))
+    if sent_end_clamped <= sent_start:
+        return None
+
+    start_ri, start_ci = char_map[sent_start]
+    end_ri, end_ci = char_map[sent_end_clamped - 1]
+
+    result = []
+    for ri in range(start_ri, end_ri + 1):
+        run = runs[ri]
+        run_text = run_texts[ri]
+        s = start_ci if ri == start_ri else 0
+        e = end_ci + 1 if ri == end_ri else len(run_text)
+        result.append((run, s, e))
+    return result
+
+
+def _match_from_char_span_in_paragraph(p: etree._Element, start_char: int, end_char: int):
+    """
+    Convert paragraph-local character offsets [start_char, end_char) into run slices.
+    Returns list of (run_element, start_offset, end_offset) or None.
+    """
+    runs = [r for r in p.findall(f".//{W('r')}") if _get_run_visible_text(r)]
+    if not runs:
+        return None
+
+    run_texts = [_get_run_visible_text(r) for r in runs]
+    total_len = sum(len(t) for t in run_texts)
+    if total_len == 0:
+        return None
+
+    s = max(0, min(start_char, total_len - 1))
+    e = max(s + 1, min(end_char, total_len))
+
+    char_map = []
+    for ri, txt in enumerate(run_texts):
+        for ci in range(len(txt)):
+            char_map.append((ri, ci))
+
+    start_ri, start_ci = char_map[s]
+    end_ri, end_ci = char_map[e - 1]
+
+    result = []
+    for ri in range(start_ri, end_ri + 1):
+        run = runs[ri]
+        run_text = run_texts[ri]
+        rs = start_ci if ri == start_ri else 0
+        re = end_ci + 1 if ri == end_ri else len(run_text)
+        result.append((run, rs, re))
     return result
 
 
@@ -171,6 +323,258 @@ def _has_comments_rel(rels_root: etree._Element) -> bool:
         if rel.get("Type", "") == COMMENTS_REL_TYPE:
             return True
     return False
+
+
+def _iter_doc_paragraphs(body: etree._Element):
+    """Yield all w:p paragraphs in document order (including table cells)."""
+    for el in body.iter():
+        if el.tag == W("p"):
+            yield el
+
+
+def _split_runs_for_match(match):
+    """Prepare a matched run range for comment markers; returns (first_run, last_run)."""
+    first_run = match[0][0]
+    first_start = match[0][1]
+    last_run = match[-1][0]
+    last_end = match[-1][2]
+
+    first_parent = first_run.getparent()
+    last_parent = last_run.getparent()
+    if first_parent is None or last_parent is None:
+        return first_run, first_run
+
+    first_idx = list(first_parent).index(first_run)
+
+    # If the match starts mid-run, split the first run
+    first_run_text = _get_run_visible_text(first_run)
+    if first_start > 0 and _run_is_simple_text(first_run):
+        before_text = first_run_text[:first_start]
+        after_text = first_run_text[first_start:]
+        rpr = _get_run_rpr(first_run)
+
+        before_run = _make_run(before_text, rpr)
+        first_parent.insert(first_idx, before_run)
+
+        for t_elem in first_run.findall(W("t")):
+            first_run.remove(t_elem)
+        new_t = etree.SubElement(first_run, W("t"))
+        new_t.text = after_text
+        new_t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+
+    # If the match ends mid-run, split the last run
+    last_run_text = _get_run_visible_text(last_run)
+    if last_run == first_run:
+        last_run_text = _get_run_visible_text(last_run)
+        effective_end = last_end - first_start if first_start > 0 else last_end
+    else:
+        effective_end = last_end
+
+    if effective_end < len(last_run_text) and _run_is_simple_text(last_run):
+        matched_text = last_run_text[:effective_end]
+        remainder_text = last_run_text[effective_end:]
+        rpr = _get_run_rpr(last_run)
+
+        for t_elem in last_run.findall(W("t")):
+            last_run.remove(t_elem)
+        new_t = etree.SubElement(last_run, W("t"))
+        new_t.text = matched_text
+        new_t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+
+        last_parent = last_run.getparent()
+        last_idx = list(last_parent).index(last_run)
+        remainder_run = _make_run(remainder_text, rpr)
+        last_parent.insert(last_idx + 1, remainder_run)
+
+    return first_run, last_run
+
+
+def _inject_comment_markers_from_runs(first_run: etree._Element, last_run: etree._Element, comment_id: int) -> None:
+    """Inject commentRangeStart/End and commentReference around prepared run range."""
+    first_parent = first_run.getparent()
+    last_parent = last_run.getparent()
+    if first_parent is None or last_parent is None:
+        return
+
+    first_idx = list(first_parent).index(first_run)
+    range_start = etree.Element(W("commentRangeStart"))
+    range_start.set(W("id"), str(comment_id))
+    first_parent.insert(first_idx, range_start)
+
+    last_idx = list(last_parent).index(last_run)
+    range_end = etree.Element(W("commentRangeEnd"))
+    range_end.set(W("id"), str(comment_id))
+    last_parent.insert(last_idx + 1, range_end)
+
+    ref_run = etree.Element(W("r"))
+    ref_rpr = etree.SubElement(ref_run, W("rPr"))
+    ref_style = etree.SubElement(ref_rpr, W("rStyle"))
+    ref_style.set(W("val"), "CommentReference")
+    ref_elem = etree.SubElement(ref_run, W("commentReference"))
+    ref_elem.set(W("id"), str(comment_id))
+    end_idx = list(last_parent).index(range_end)
+    last_parent.insert(end_idx + 1, ref_run)
+
+
+def _find_first_text_run_in_paragraph(p: etree._Element):
+    """Return first run with visible text in a paragraph, else None."""
+    for run in p.findall(f".//{W('r')}"):
+        txt = _get_run_visible_text(run)
+        if txt and txt.strip():
+            return run
+    return None
+
+
+def add_comment_to_doc_by_paragraph_index(
+    filepath: str,
+    paragraph_index: int,
+    comment_text: str,
+    author: str = DEFAULT_AUTHOR,
+    initials: str = DEFAULT_INITIALS,
+    target_text: Optional[str] = None,
+    target_start: Optional[int] = None,
+    target_end: Optional[int] = None,
+) -> dict:
+    """
+    Add a comment scoped to a specific document.xml paragraph index.
+    Paragraph indexing follows raw XML order (includes table-cell paragraphs).
+    """
+    filepath = Path(filepath)
+    zip_bytes = filepath.read_bytes()
+
+    doc_xml_bytes = _load_zip_part(zip_bytes, "word/document.xml")
+    if doc_xml_bytes is None:
+        return {"success": False, "error": "Cannot find word/document.xml in the docx file"}
+
+    doc_root = etree.fromstring(doc_xml_bytes)
+    body = doc_root.find(W("body"))
+    if body is None:
+        return {"success": False, "error": "Document has no body element"}
+
+    paragraphs = list(_iter_doc_paragraphs(body))
+    if paragraph_index < 0 or paragraph_index >= len(paragraphs):
+        return {
+            "success": False,
+            "error": f"Invalid paragraph_index {paragraph_index}; document has {len(paragraphs)} paragraphs in XML order",
+        }
+    target_para = paragraphs[paragraph_index]
+
+    if target_start is not None and target_end is not None:
+        match = _match_from_char_span_in_paragraph(target_para, int(target_start), int(target_end))
+    elif target_text:
+        # Prefer sentence-scoped range around the matched key for precise review UX.
+        match = _find_sentence_in_paragraph(target_para, target_text)
+        if match is None:
+            match = _find_text_in_paragraph(target_para, target_text)
+    else:
+        match = None
+
+    # Fallback: anchor to first textual run in the same paragraph.
+    if match is None:
+        fallback_run = _find_first_text_run_in_paragraph(target_para)
+        if fallback_run is None:
+            return {
+                "success": False,
+                "error": f"No anchorable text run in paragraph_index {paragraph_index}",
+            }
+        run_text = _get_run_text(fallback_run)
+        match = [(fallback_run, 0, len(run_text))]
+
+    comments_bytes = _load_zip_part(zip_bytes, "word/comments.xml")
+    comments_root = etree.fromstring(comments_bytes) if comments_bytes is not None else etree.fromstring(COMMENTS_XML_TEMPLATE)
+
+    max_comment_id = _get_max_comment_id(comments_root)
+    max_doc_id = _get_max_id_in_doc(doc_root)
+    comment_id = max(max_comment_id, max_doc_id) + 1
+
+    timestamp = _now_iso()
+    para_id = _generate_hex_id()
+
+    comment_elem = etree.SubElement(comments_root, W("comment"))
+    comment_elem.set(W("id"), str(comment_id))
+    comment_elem.set(W("author"), author)
+    comment_elem.set(W("date"), timestamp)
+    comment_elem.set(W("initials"), initials)
+
+    cp = etree.SubElement(comment_elem, W("p"))
+    cp.set(W14("paraId"), para_id)
+    cp.set(W14("textId"), "77777777")
+    ann_run = etree.SubElement(cp, W("r"))
+    ann_rpr = etree.SubElement(ann_run, W("rPr"))
+    ann_style = etree.SubElement(ann_rpr, W("rStyle"))
+    ann_style.set(W("val"), "CommentReference")
+    etree.SubElement(ann_run, W("annotationRef"))
+    _append_comment_text_run(cp, comment_text)
+
+    first_run, last_run = _split_runs_for_match(match)
+    _inject_comment_markers_from_runs(first_run, last_run, comment_id)
+
+    rels_bytes = _load_zip_part(zip_bytes, "word/_rels/document.xml.rels")
+    rels_modified = False
+    if rels_bytes is not None:
+        rels_root = etree.fromstring(rels_bytes)
+        if not _has_comments_rel(rels_root):
+            next_rid = _get_next_rid(rels_root)
+            new_rel = etree.SubElement(rels_root, "{%s}Relationship" % REL_NS)
+            new_rel.set("Id", f"rId{next_rid}")
+            new_rel.set("Type", COMMENTS_REL_TYPE)
+            new_rel.set("Target", "comments.xml")
+            rels_modified = True
+    else:
+        rels_root = None
+
+    ct_bytes = _load_zip_part(zip_bytes, "[Content_Types].xml")
+    ct_modified = False
+    if ct_bytes is not None:
+        ct_root = etree.fromstring(ct_bytes)
+        has_ct = False
+        for override in ct_root.iter("{%s}Override" % CT_NS):
+            if override.get("PartName") == "/word/comments.xml":
+                has_ct = True
+                break
+        if not has_ct:
+            new_override = etree.SubElement(ct_root, "{%s}Override" % CT_NS)
+            new_override.set("PartName", "/word/comments.xml")
+            new_override.set("ContentType",
+                             "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml")
+            ct_modified = True
+    else:
+        ct_root = None
+
+    new_doc_xml = etree.tostring(doc_root, xml_declaration=True, encoding="UTF-8", standalone=True)
+    new_comments_xml = etree.tostring(comments_root, xml_declaration=True, encoding="UTF-8", standalone=True)
+    new_rels_xml = etree.tostring(rels_root, xml_declaration=True, encoding="UTF-8", standalone=True) if rels_modified and rels_root is not None else None
+    new_ct_xml = etree.tostring(ct_root, xml_declaration=True, encoding="UTF-8", standalone=True) if ct_modified and ct_root is not None else None
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(BytesIO(zip_bytes), "r") as zf_in:
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf_out:
+            comments_written = False
+            for item in zf_in.infolist():
+                if item.filename == "word/document.xml":
+                    zf_out.writestr(item, new_doc_xml)
+                elif item.filename == "word/comments.xml":
+                    zf_out.writestr(item, new_comments_xml)
+                    comments_written = True
+                elif item.filename == "word/_rels/document.xml.rels" and new_rels_xml is not None:
+                    zf_out.writestr(item, new_rels_xml)
+                elif item.filename == "[Content_Types].xml" and new_ct_xml is not None:
+                    zf_out.writestr(item, new_ct_xml)
+                else:
+                    zf_out.writestr(item, zf_in.read(item.filename))
+            if not comments_written:
+                zf_out.writestr("word/comments.xml", new_comments_xml)
+
+    filepath.write_bytes(buffer.getvalue())
+    return {
+        "success": True,
+        "comment_id": comment_id,
+        "author": author,
+        "paragraph_index": paragraph_index,
+        "target_text": target_text,
+        "comment_text": comment_text,
+        "message": f"Added comment #{comment_id} by {author} at paragraph_index {paragraph_index}",
+    }
 
 
 def add_comment_to_doc(
@@ -254,15 +658,7 @@ def add_comment_to_doc(
     etree.SubElement(ann_run, W("annotationRef"))
 
     # Comment text run
-    text_run = etree.SubElement(cp, W("r"))
-    text_rpr = etree.SubElement(text_run, W("rPr"))
-    sz = etree.SubElement(text_rpr, W("sz"))
-    sz.set(W("val"), "20")
-    szCs = etree.SubElement(text_rpr, W("szCs"))
-    szCs.set(W("val"), "20")
-    ct = etree.SubElement(text_run, W("t"))
-    ct.text = comment_text
-    ct.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    _append_comment_text_run(cp, comment_text)
 
     # --- Inject markers into document.xml ---
     # We need:
