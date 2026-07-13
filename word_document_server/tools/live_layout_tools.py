@@ -11,6 +11,21 @@ import sys
 # macOS JXA dispatch
 _MAC_AVAILABLE = sys.platform == 'darwin'
 
+def _safe_fullname(doc) -> str:
+    """Return doc.FullName, or the bare Name if the document was never saved.
+
+    Callers echo this back so a same-basename document can never be confused
+    with another in a different folder.
+    """
+    try:
+        return str(doc.FullName)
+    except Exception:
+        try:
+            return str(doc.Name)
+        except Exception:
+            return "<unknown>"
+
+
 # 1 inch = 72 points (avoid app.InchesToPoints which can fail on some COM setups)
 _PTS_PER_INCH = 72.0
 
@@ -50,7 +65,7 @@ async def word_live_set_page_layout(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -94,7 +109,7 @@ async def word_live_set_page_layout(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "section": section_index,
             "changes": changes,
         })
@@ -132,7 +147,7 @@ async def word_live_add_header_footer(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -168,7 +183,7 @@ async def word_live_add_header_footer(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "section": section_index,
             "added": added,
         }, ensure_ascii=False)
@@ -207,7 +222,7 @@ async def word_live_add_page_numbers(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -264,7 +279,7 @@ async def word_live_add_page_numbers(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "section": section_index,
             "position": position,
             "alignment": alignment,
@@ -296,7 +311,7 @@ async def word_live_add_section_break(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -322,7 +337,7 @@ async def word_live_add_section_break(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "break_type": break_type,
             "total_sections": doc.Sections.Count,
         })
@@ -374,7 +389,7 @@ async def word_live_set_paragraph_spacing(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -427,7 +442,7 @@ async def word_live_set_paragraph_spacing(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "paragraphs_affected": count,
         })
 
@@ -461,7 +476,7 @@ async def word_live_add_bookmark(
         return json.dumps({"error": "bookmark_name is required"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -477,7 +492,7 @@ async def word_live_add_bookmark(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "bookmark_name": bookmark_name,
             "paragraph_index": paragraph_index,
         })
@@ -514,7 +529,7 @@ async def word_live_add_watermark(
         return json.dumps({"error": "Live layout tools are only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -561,7 +576,7 @@ async def word_live_add_watermark(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "text": text,
             "font_size": font_size,
             "color": font_color,

@@ -6,6 +6,21 @@ import sys
 
 _MAC_AVAILABLE = sys.platform == 'darwin'
 
+def _safe_fullname(doc) -> str:
+    """Return doc.FullName, or the bare Name if the document was never saved.
+
+    Callers echo this back so a same-basename document can never be confused
+    with another in a different folder.
+    """
+    try:
+        return str(doc.FullName)
+    except Exception:
+        try:
+            return str(doc.Name)
+        except Exception:
+            return "<unknown>"
+
+
 
 def _capture_window_to_png(hwnd: int) -> bytes:
     """Capture a window using PrintWindow and return PNG bytes.
@@ -118,7 +133,7 @@ async def word_screen_capture(filename: str = None, output_path: str = None) -> 
                 "path": output_path,
                 "width": img.width,
                 "height": img.height,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
             }
         )
 
