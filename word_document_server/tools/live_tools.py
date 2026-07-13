@@ -1390,7 +1390,11 @@ async def word_live_format_table(
             "thick": 6,    # wdLineStyleThickThinSmallGap (thick)
         }
 
-        BORDER_IDS = [-1, -2, -3, -4, -5, -6, -7, -8]  # top, left, bottom, right, horiz, vert, etc.
+        # wdBorderTop/Left/Bottom/Right + wdBorderHorizontal/Vertical (inside gridlines).
+        BORDER_IDS = [-1, -2, -3, -4, -5, -6]
+        # wdBorderDiagonalDown/Up. Drawing these would put an X through every cell,
+        # so they are only ever cleared, never styled.
+        DIAGONAL_IDS = [-7, -8]
 
         with undo_record(app, "MCP: Format Table"):
             # --- Borders ---
@@ -1401,6 +1405,11 @@ async def word_live_format_table(
                 for bid in BORDER_IDS:
                     try:
                         tbl.Borders(bid).LineStyle = style_val
+                    except Exception:
+                        pass
+                for bid in DIAGONAL_IDS:
+                    try:
+                        tbl.Borders(bid).LineStyle = 0  # wdLineStyleNone
                     except Exception:
                         pass
                 actions.append(f"borders={border_style}")
