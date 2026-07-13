@@ -13,6 +13,21 @@ from word_document_server.defaults import DEFAULT_AUTHOR
 # macOS JXA dispatch
 _MAC_AVAILABLE = __import__('sys').platform == 'darwin'
 
+def _safe_fullname(doc) -> str:
+    """Return doc.FullName, or the bare Name if the document was never saved.
+
+    Callers echo this back so a same-basename document can never be confused
+    with another in a different folder.
+    """
+    try:
+        return str(doc.FullName)
+    except Exception:
+        try:
+            return str(doc.Name)
+        except Exception:
+            return "<unknown>"
+
+
 
 # Word COM constants
 WD_STORY = 6
@@ -20,6 +35,27 @@ WD_STORY = 6
 # Word COM InsertBefore/InsertAfter limit (~32K chars).
 # We use 30000 as safe margin below 2^15-1 = 32767.
 _INSERT_CHUNK_SIZE = 30000
+
+
+def _active_document_name(app) -> str:
+    """Return the active document's FullName, or a placeholder if unavailable."""
+    try:
+        return app.ActiveDocument.FullName
+    except Exception:
+        return "<none>"
+
+
+def _is_active_document(app, doc) -> bool:
+    """True if *doc* is the application's active document.
+
+    Compared by FullName rather than COM identity: separate Dispatch wrappers
+    around the same underlying document do not compare equal with ``==``.
+    Fails closed (returns False) if ActiveDocument cannot be read.
+    """
+    try:
+        return str(app.ActiveDocument.FullName).lower() == str(doc.FullName).lower()
+    except Exception:
+        return False
 
 
 async def word_live_insert_text(
@@ -51,7 +87,7 @@ async def word_live_insert_text(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -97,6 +133,20 @@ async def word_live_insert_text(
                         rng = doc.Range(end_pos, end_pos)
                         rng.InsertAfter(chunk)
                 elif position == "cursor":
+                    # app.Selection is APPLICATION-level: it types wherever the
+                    # user's caret currently is, which may be a different open
+                    # document than the one `filename` resolved to. Refuse unless
+                    # the resolved document is genuinely the active one.
+                    if not _is_active_document(app, doc):
+                        return json.dumps({
+                            "error": (
+                                f"position='cursor' can only write to the active document. "
+                                f"Resolved document is '{doc.FullName}' but the active "
+                                f"document is '{_active_document_name(app)}'. "
+                                "Use position='start', 'end', or a character offset, "
+                                "or activate the target document in Word first."
+                            )
+                        })
                     for chunk in chunks:
                         app.Selection.TypeText(chunk)
                 else:
@@ -119,7 +169,7 @@ async def word_live_insert_text(
 
         result = {
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "text_length": len(text),
             "position": position,
             "tracked": track_changes,
@@ -198,7 +248,7 @@ async def word_live_format_text(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -317,7 +367,7 @@ async def word_live_format_text(
         return json.dumps(
             {
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "range": range_label,
                 "text_preview": preview,
                 "tracked": track_changes,
@@ -403,7 +453,7 @@ async def word_live_apply_list(
         end_paragraph = start_paragraph
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -501,7 +551,7 @@ async def word_live_apply_list(
         action = "removed" if remove else f"applied {list_type}"
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "action": action,
             "paragraphs": f"{start_paragraph}-{end_paragraph}",
             "count": formatted,
@@ -604,7 +654,7 @@ async def word_live_setup_heading_numbering(
         return json.dumps({"error": "Provide h1_paragraphs and/or h2_paragraphs"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -901,7 +951,7 @@ async def word_live_setup_heading_numbering(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "h1_applied": h1_applied,
             "h2_applied": h2_applied,
             "stripped": stripped,
@@ -979,7 +1029,7 @@ async def word_live_replace_text(
         })
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -1035,7 +1085,7 @@ async def word_live_replace_text(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "find_text": find_text,
             "replace_text": replace_text,
             "replacements": count,
@@ -1092,7 +1142,7 @@ async def word_live_insert_paragraphs(
         return json.dumps({"error": f"position must be 'before' or 'after', got '{position}'"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -1163,7 +1213,7 @@ async def word_live_insert_paragraphs(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "paragraphs_inserted": inserted,
             "position": position,
             "style": resolved_style,
@@ -1209,7 +1259,7 @@ async def word_live_add_table(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -1308,7 +1358,7 @@ async def word_live_add_table(
         return json.dumps(
             {
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "rows": rows,
                 "cols": cols,
                 "position": position,
@@ -1365,7 +1415,7 @@ async def word_live_format_table(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -1490,7 +1540,7 @@ async def word_live_format_table(
         return json.dumps(
             {
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "table_index": idx,
                 "rows": tbl.Rows.Count,
                 "cols": tbl.Columns.Count,
@@ -1532,7 +1582,7 @@ async def word_live_delete_text(
         )
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -1569,7 +1619,7 @@ async def word_live_delete_text(
         return json.dumps(
             {
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "deleted_text": preview,
                 "range": f"{start}-{end}",
                 "tracked": track_changes,
@@ -1641,7 +1691,7 @@ async def word_live_modify_table(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
         from word_document_server.core import table_com
 
         app = get_word_app()
@@ -1784,7 +1834,7 @@ async def word_live_undo(
         return json.dumps({"error": "times must be >= 1"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -1793,7 +1843,7 @@ async def word_live_undo(
 
         return json.dumps({
             "success": bool(result),
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "times_requested": times,
             "undo_result": bool(result),
         })
@@ -1825,7 +1875,7 @@ async def word_live_save(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -1845,7 +1895,7 @@ async def word_live_save(
             doc.SaveAs2(save_path, FileFormat=file_format)
             return json.dumps({
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "saved_as": save_path,
                 "format": ext,
             }, ensure_ascii=False)
@@ -1853,7 +1903,7 @@ async def word_live_save(
             doc.Save()
             return json.dumps({
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "path": doc.FullName,
             }, ensure_ascii=False)
 
@@ -1884,7 +1934,7 @@ async def word_live_toggle_track_changes(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -1897,7 +1947,7 @@ async def word_live_toggle_track_changes(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "previous_state": previous,
             "track_changes": bool(doc.TrackRevisions),
         })
@@ -1962,7 +2012,7 @@ async def word_live_insert_image(
         return json.dumps({"error": f"Image file not found: {abs_path}"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -2130,7 +2180,7 @@ async def word_live_insert_image(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "image": os.path.basename(abs_path),
             "width_pt": result_width,
             "height_pt": result_height,
@@ -2212,7 +2262,7 @@ async def word_live_insert_cross_reference(
         })
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -2250,7 +2300,7 @@ async def word_live_insert_cross_reference(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "ref_type": ref_type,
             "ref_item": ref_item,
             "ref_kind": ref_kind,
@@ -2292,6 +2342,7 @@ async def word_live_list_cross_reference_items(
         })
 
     try:
+        # Read-only lister: no mutation, so the permissive resolver is fine here.
         from word_document_server.core.word_com import get_word_app, find_document
 
         app = get_word_app()
@@ -2360,7 +2411,7 @@ async def word_live_list_cross_reference_items(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "ref_type": ref_type,
             "items": result,
             "count": len(result),
@@ -2481,7 +2532,7 @@ async def word_live_insert_equation(
         return json.dumps({"error": "Live editing is only available on Windows"})
 
     try:
-        from word_document_server.core.word_com import get_word_app, find_document, undo_record
+        from word_document_server.core.word_com import get_word_app, find_document_for_write as find_document, undo_record
 
         app = get_word_app()
         doc = find_document(app, filename)
@@ -2539,7 +2590,7 @@ async def word_live_insert_equation(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "equation": equation,
             "display_mode": display_mode,
             "omath_count": doc.OMaths.Count,
