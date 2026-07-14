@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete list of all 115 tools provided by word-mcp-live.
+Complete reference for the tools provided by word-mcp-live.
 
 ---
 
@@ -250,5 +250,29 @@ These require Windows with Microsoft Word installed. They operate on documents *
 |------|-------------|
 | `word_live_undo` | Undo last N operations (each tool call = one undo entry) |
 | `word_screen_capture` | Screenshot of the Word window |
+
+</details>
+
+<details open>
+<summary><b>Live Equations: MathType OLE + Word OMML (Windows only)</b></summary>
+
+Semantic MathML/TeX access to MathType (Design Science / WIRIS) OLE and Word OMML equations in the open document. Requires the bundled Word add-in — see the README section "MathType OLE equations" for the one-time build/registration steps.
+
+| Tool | Description |
+|------|-------------|
+| `word_live_list_equations` | List MathType and OMML equations with stable ids, layout, number, and position |
+| `word_live_get_equation` | Read either equation type as MathML plus a concurrency sha256 |
+| `word_live_dump_equation_document` | Write document text and every MathType/OMML equation to one agent-readable file |
+| `word_live_delete_equation` | Delete either equation type with revision control and one-step Undo |
+| `word_live_replace_equation_tex` | Replace either equation type from TeX with hash-guarded verification and rollback |
+| `word_live_insert_equation_tex` | Insert a MathType equation from TeX as `inline`, `display`, or native `display_numbered` layout |
+| `word_live_list_mathtype_equations` | List every MathType OLE equation with id, layout (inline / display / display_numbered / table), equation number, and position |
+| `word_live_get_mathtype_equation` | Read one equation as validated MathML plus a concurrency sha256 |
+| `word_live_dump_mathtype_equations` | Write all equations (id, context, canonical MathML) to a text file in one call |
+| `word_live_dump_mathtype_document` | Write the full document text with inline `[eq N]` markers plus a MathML appendix |
+| `word_live_delete_mathtype_equation` | Delete one equation (single undo record) |
+| `word_live_replace_mathtype_equation_tex` | Replace one equation from TeX via MathType's Toggle TeX (popup-free, hash-guarded, auto-rollback on failure) |
+| `word_live_replace_mathtype_equation` | Replace one equation by writing MathML directly (rejected by current MathType builds; kept for future format support) |
+| `word_live_probe_mathtype_equation` | Diagnostic: enumerate the OLE clipboard formats an equation offers |
 
 </details>

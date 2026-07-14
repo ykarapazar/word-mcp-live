@@ -24,3 +24,8 @@ mcp-config.json
 # MCP publisher
 mcp-publisher.exe
 *.mcpb
+
+# Package the reviewed MathType bridge binaries while ignoring other local output.
+word_document_server/bin/*
+!word_document_server/bin/MathTypeBridge.exe
+!word_document_server/bin/MathTypeAddIn.dll
