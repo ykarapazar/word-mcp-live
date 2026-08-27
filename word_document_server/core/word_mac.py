@@ -656,6 +656,20 @@ var r = d.createRange({{start: startP, end: endP}});
         fmt_lines.append(f"r.paragraphFormat.pageBreakBefore = {'true' if page_break_before else 'false'};")
     fmt_js = "\n    ".join(fmt_lines)
 
+    bold_bleed_js = ""
+    if bold is True:
+        bold_bleed_js = (
+            "var rStart = r.startOfContent();\n"
+            "    var rEnd = r.endOfContent();\n"
+            "    var txt = r.content();\n"
+            "    for (var pi = 0; pi < txt.length; pi++) {\n"
+            "        if (txt[pi] === '\\r') {\n"
+            "            var pm = d.createRange({start: rStart + pi, end: rStart + pi + 1});\n"
+            "            pm.bold = false;\n"
+            "        }\n"
+            "    }"
+        )
+
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
@@ -665,17 +679,7 @@ try {{
     {range_js}
     {fmt_js}
     // Prevent bold bleed: unbold paragraph marks within the range
-    {"" if bold is not True else """
-    var rStart = r.startOfContent();
-    var rEnd = r.endOfContent();
-    var txt = r.content();
-    for (var pi = 0; pi < txt.length; pi++) {
-        if (txt[pi] === '\\r') {
-            var pm = d.createRange({start: rStart + pi, end: rStart + pi + 1});
-            pm.bold = false;
-        }
-    }
-    """}
+    {bold_bleed_js}
 }} finally {{
     d.trackRevisions = prevTracking;
 }}
@@ -1461,6 +1465,14 @@ JSON.stringify({{applied: true, type: "multilevel", h1: counts[1], h2: counts[2]
 
         elif heading_texts:
             texts_json = json.dumps(heading_texts)
+            h1_color_block = ""
+            if font_color:
+                h1_color_block = (
+                    "var fc = " + _color_to_mac_rgb(font_color) + ";\n"
+                    "for (var i = firstH1; i < paras.length; i++) {\n"
+                    "    try { paras[i].textObject.fontObject.color = fc; } catch(e) {}\n"
+                    "}"
+                )
             return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
@@ -1500,12 +1512,7 @@ for (var i = firstH1; i < paras.length; i++) {{
         h2Applied++;
     }}
 }}
-{"" if not font_color else f"""
-var fc = {_color_to_mac_rgb(font_color)};
-for (var i = firstH1; i < paras.length; i++) {{
-    try {{ paras[i].textObject.fontObject.color = fc; }} catch(e) {{}}
-}}
-"""}
+{h1_color_block}
 JSON.stringify({{applied: true, type: "multilevel", h1: h1Applied, h2: h2Applied}});
 """, timeout=180)
         else:
