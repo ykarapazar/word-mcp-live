@@ -5,54 +5,113 @@ This module provides low-level functions to extract and process comments
 from Word documents using the python-docx library.
 """
 import datetime
+import zipfile
 from typing import Dict, List, Optional, Any
 from docx import Document
 from docx.document import Document as DocumentType
 from docx.text.paragraph import Paragraph
 
+_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 
-def extract_all_comments(doc: DocumentType) -> List[Dict[str, Any]]:
+
+def extract_anchor_texts(doc: DocumentType) -> Dict[str, str]:
+    """
+    Scan the document body for <w:commentRangeStart> / <w:commentRangeEnd> pairs
+    and collect the text between them.  Returns {comment_w_id: anchor_text}.
+    """
+    W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    anchor_texts: Dict[str, str] = {}
+    collecting: Dict[str, list] = {}  # open ranges: comment_id -> text chunks
+
+    for elem in doc.element.body.iter():
+        tag = elem.tag
+        if tag == f'{{{W}}}commentRangeStart':
+            cid = elem.get(f'{{{W}}}id')
+            if cid is not None:
+                collecting[cid] = []
+        elif tag == f'{{{W}}}commentRangeEnd':
+            cid = elem.get(f'{{{W}}}id')
+            if cid in collecting:
+                anchor_texts[cid] = ''.join(collecting.pop(cid))
+        elif tag == f'{{{W}}}t' and collecting:
+            text = elem.text or ''
+            for chunks in collecting.values():
+                chunks.append(text)
+
+    return anchor_texts
+
+
+def extract_all_comments(doc: DocumentType, source_path: str = '') -> List[Dict[str, Any]]:
     """
     Extract all comments from a Word document.
-    
+
     Args:
         doc: The Document object to extract comments from
-        
+        source_path: Path to the original .docx file (enables direct ZIP extraction)
+
     Returns:
         List of dictionaries containing comment information
     """
     comments = []
-    
-    # Access the document's comment part if it exists
-    try:
-        # Get the document part
-        document_part = doc.part
-        
-        # Find comments part through relationships
-        comments_part = None
-        for rel_id, rel in document_part.rels.items():
-            if 'comments' in rel.reltype and 'comments' == rel.reltype.split('/')[-1]:
-                comments_part = rel.target_part
-                break
-        
-        if comments_part:
-            # Extract comments from the comments part using proper xpath syntax
-            comment_elements = comments_part.element.xpath('.//w:comment')
-            
-            for idx, comment_element in enumerate(comment_elements):
-                comment_data = extract_comment_data(comment_element, idx)
-                if comment_data:
-                    comments.append(comment_data)
-        
-        # If no comments found, try alternative approach
-        if not comments:
-            # Fallback: scan paragraphs for comment references
-            comments = extract_comments_from_paragraphs(doc)
-    
-    except Exception as e:
-        # If direct access fails, try alternative approach
+    _errors: List[str] = []
+
+    # Primary: read comments.xml directly from the ZIP — reliable across all OS/versions
+    if source_path:
+        try:
+            with zipfile.ZipFile(source_path) as z:
+                if 'word/comments.xml' in z.namelist():
+                    import xml.etree.ElementTree as ET
+                    with z.open('word/comments.xml') as f:
+                        tree = ET.parse(f)
+                    for idx, elem in enumerate(tree.findall(f'{{{_W}}}comment')):
+                        comment_data = extract_comment_data(elem, idx)
+                        if comment_data:
+                            comments.append(comment_data)
+                else:
+                    _errors.append('no word/comments.xml in zip')
+        except Exception as e:
+            _errors.append(f'zip error: {e}')
+
+    # Fallback: python-docx relationship API (parse blob directly to avoid Part.element issues)
+    if not comments:
+        try:
+            import xml.etree.ElementTree as ET
+            document_part = doc.part
+            comments_part = None
+            for rel in document_part.rels.values():
+                if rel.reltype.split('/')[-1] == 'comments':
+                    comments_part = rel.target_part
+                    break
+            if comments_part:
+                blob = comments_part.blob
+                tree = ET.fromstring(blob)
+                for idx, elem in enumerate(tree.findall(f'{{{_W}}}comment')):
+                    comment_data = extract_comment_data(elem, idx)
+                    if comment_data:
+                        comments.append(comment_data)
+            else:
+                _errors.append('docx api: no comments_part found')
+        except Exception as e:
+            _errors.append(f'docx api error: {e}')
+
+    # Last resort: paragraph scan
+    if not comments:
         comments = extract_comments_from_paragraphs(doc)
-    
+
+    # Surface errors as a diagnostic comment if nothing was found
+    if not comments and _errors:
+        comments = [{'id': 'ERR', 'comment_id': 'ERR', 'author': 'DIAGNOSTIC',
+                     'text': ' | '.join(_errors), 'reference_text': source_path,
+                     'date': None, 'paragraph_index': None, 'in_table': False}]
+
+    # Populate reference_text with the exact highlighted text from body XML
+    if comments:
+        anchor_texts = extract_anchor_texts(doc)
+        for c in comments:
+            cid = c.get('comment_id')
+            if cid and cid in anchor_texts:
+                c['reference_text'] = anchor_texts[cid]
+
     return comments
 
 
@@ -114,8 +173,10 @@ def extract_comment_data(comment_element, index: int) -> Optional[Dict[str, Any]
             except:
                 date = date_str
         
-        # Extract comment text
-        text_elements = comment_element.xpath('.//w:t')
+        # Extract comment text — use Clark notation so this works with both lxml and stdlib ET
+        text_elements = comment_element.findall(
+            f'.//{{{_W}}}t'
+        )
         text = ''.join(elem.text or '' for elem in text_elements)
         
         return {
