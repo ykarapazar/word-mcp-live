@@ -6,7 +6,7 @@
 
 **The only MCP server that edits Word documents while they're open**
 
-`Live editing` &middot; `Tracked changes` &middot; `Per-action undo` &middot; `124 tools` &middot; `Cross-platform`
+`Live editing` &middot; `Tracked changes` &middot; `Per-action undo` &middot; `Cross-platform`
 
 [![PyPI](https://img.shields.io/pypi/v/word-mcp-live?color=blue)](https://pypi.org/project/word-mcp-live/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
@@ -56,7 +56,7 @@ https://github.com/user-attachments/assets/fbb09af4-1e25-4e49-94d0-45b363278810
 - **Threaded comments** — Add, reply, resolve, and delete comments like a human reviewer.
 - **Layout diagnostics** — Detects formatting problems before they become print disasters.
 - **Equations & cross-references** — Insert math formulas and auto-updating references.
-- **124 tools** — The most comprehensive Word MCP server available.
+- **Comprehensive toolkit** — Broad Word editing coverage in one MCP server.
 
 ## Quick Start
 
@@ -336,13 +336,13 @@ The comment appears in Word's Review panel, anchored to the specified text.
 
 ## Tool Reference
 
-**124 tools** across two modes — see the [complete tool reference](TOOLS.md) for details.
+Tools are available across two modes — see the [complete tool reference](TOOLS.md) for details.
 
-| Category | Count |
-|----------|-------|
-| Cross-platform (python-docx) | 80 |
-| Windows Live (COM automation) | 44 |
-| macOS Live (JXA automation) | 40 (of the 44 live tools) |
+| Category | Backend |
+|----------|---------|
+| Cross-platform | python-docx |
+| Windows Live | COM automation |
+| macOS Live | JXA automation (most live tools) |
 
 ## Requirements
 
@@ -352,6 +352,24 @@ The comment appears in Word's Review panel, anchored to the specified text.
 - **macOS Live tools:** macOS + Microsoft Word for Mac (uses built-in JXA — no extra dependencies)
 
 > The cross-platform tools work without Word installed — only python-docx is needed.
+
+
+### MathType OLE equations (Windows, optional)
+
+The live equation tools read and edit MathType (Design Science / WIRIS) OLE equations and Word OMML equations in the open document through one MathML/TeX interface. TeX insertion supports inline, display, and native MathType-numbered display layouts. These Windows live tools need a small bundled Word add-in (one-time setup, per-user, no admin rights):
+
+```powershell
+# use the Python environment where word-mcp-live is installed; keep Word closed
+$bridgeDir = python -c "from word_document_server.core.mathtype_bridge import bridge_executable_path; print(bridge_executable_path().parent.parent / 'mathtype_bridge')"
+Set-Location $bridgeDir
+# Source checkouts only, after changing MathTypeBridge.cs:
+# ./build_mathtype_bridge.ps1      # needs .NET Framework 4.x, included with Windows
+./install_mathtype_addin.ps1       # registers the add-in under HKCU
+# restart Word
+```
+
+Published wheels and MCP bundles include the reviewed bridge binaries. Source contributors only need to rebuild them after changing the C# bridge. Uninstall with `./uninstall_mathtype_addin.ps1` (then restart Word). Without add-in registration the MathType tools return `addin_not_loaded`; incomplete source builds may return `bridge_not_built`. Every other tool works normally. MathType itself must be installed for equation editing.
+
 
 ## Contributing
 

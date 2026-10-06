@@ -4,6 +4,7 @@ dist/
 *.whl
 *.tar.gz
 *.exe
+!word_document_server/bin/MathTypeBridge.exe
 .git/
 .github/
 .env
