@@ -14,6 +14,21 @@ from word_document_server.defaults import DEFAULT_AUTHOR
 # macOS JXA dispatch
 _MAC_AVAILABLE = __import__('sys').platform == 'darwin'
 
+def _safe_fullname(doc) -> str:
+    """Return doc.FullName, or the bare Name if the document was never saved.
+
+    Callers echo this back so a same-basename document can never be confused
+    with another in a different folder.
+    """
+    try:
+        return str(doc.FullName)
+    except Exception:
+        try:
+            return str(doc.Name)
+        except Exception:
+            return "<unknown>"
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -24,8 +39,20 @@ _paragraph_snapshots: dict[str, dict] = {}
 
 
 def _doc_key(doc) -> str:
-    """Return a stable, case-insensitive key for an open COM document."""
-    return doc.Name.lower()
+    """Return a stable, case-insensitive key for an open COM document.
+
+    Keyed on FullName, not Name: two documents with the same basename in
+    different folders (``C:\\A\\Lettre.docx`` and ``C:\\B\\Lettre.docx``) would
+    otherwise share one snapshot slot, so get_diff could compare one document's
+    snapshot against the other's current text and report phantom changes.
+
+    Falls back to Name for unsaved documents, which have no path yet.
+    """
+    try:
+        full_name = doc.FullName
+    except Exception:
+        full_name = None
+    return (full_name or doc.Name).lower()
 
 
 def _read_paragraphs(doc) -> list[dict]:
@@ -90,7 +117,7 @@ async def word_live_take_snapshot(filename: str = None) -> str:
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "paragraph_count": len(paras),
             "snapshot_timestamp": snap["timestamp"] if snap else None,
             "message": "Snapshot stored. Use word_live_get_diff to see changes.",
@@ -186,7 +213,7 @@ async def word_live_get_diff(filename: str = None) -> str:
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "snapshot_age_seconds": round(time.time() - snap["timestamp"], 1),
             "current_paragraph_count": len(new_paras),
             "previous_paragraph_count": len(old_paras),
@@ -223,13 +250,13 @@ async def word_live_snapshot_status(filename: str = None) -> str:
         if snap is None:
             return json.dumps({
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "has_snapshot": False,
             })
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "has_snapshot": True,
             "age_seconds": round(time.time() - snap["timestamp"], 1),
             "paragraph_count": len(snap["paragraphs"]),
@@ -305,7 +332,7 @@ async def word_live_get_text(filename: str = None) -> str:
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "paragraph_count": len(paragraphs),
             "paragraphs": paragraphs,
         }, ensure_ascii=False)
@@ -457,7 +484,7 @@ async def word_live_get_paragraph_format(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "paragraphs": results,
         }, ensure_ascii=False)
 
@@ -705,7 +732,7 @@ async def word_live_get_comments(filename: str = None) -> str:
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "comment_count": len(comments),
             "comments": comments,
         }, ensure_ascii=False)
@@ -779,7 +806,7 @@ async def word_live_add_comment(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "comment_index": comment.Index,
             "author": author,
             "text": text[:100],
@@ -847,7 +874,7 @@ async def word_live_reply_to_comment(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "comment_index": comment_index,
             "reply_text": text[:100],
             "reply_index": reply.Index,
@@ -915,7 +942,7 @@ async def word_live_resolve_comment(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "comment_index": comment_index,
             "resolved": resolve,
             "comment_text": str(comment.Range.Text)[:100] if comment.Range else "",
@@ -968,7 +995,7 @@ async def word_live_delete_comment(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "deleted_comment_index": comment_index,
             "deleted_comment_text": comment_text,
             "remaining_comments": doc.Comments.Count,
@@ -1038,7 +1065,7 @@ async def word_live_list_revisions(filename: str = None) -> str:
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "revision_count": len(revisions),
             "revisions": revisions,
         }, ensure_ascii=False)
@@ -1085,7 +1112,7 @@ async def word_live_accept_revisions(
                         accepted += 1
                 return json.dumps({
                     "success": True,
-                    "document": doc.Name,
+                    "document": doc.Name, "document_path": _safe_fullname(doc),
                     "accepted": accepted,
                     "mode": "specific_ids",
                 })
@@ -1100,7 +1127,7 @@ async def word_live_accept_revisions(
                         accepted += 1
                 return json.dumps({
                     "success": True,
-                    "document": doc.Name,
+                    "document": doc.Name, "document_path": _safe_fullname(doc),
                     "accepted": accepted,
                     "mode": f"by_author:{author}",
                 })
@@ -1110,7 +1137,7 @@ async def word_live_accept_revisions(
             doc.AcceptAllRevisions()
             return json.dumps({
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "accepted": total,
                 "mode": "all",
             })
@@ -1156,7 +1183,7 @@ async def word_live_reject_revisions(
                         rejected += 1
                 return json.dumps({
                     "success": True,
-                    "document": doc.Name,
+                    "document": doc.Name, "document_path": _safe_fullname(doc),
                     "rejected": rejected,
                     "mode": "specific_ids",
                 })
@@ -1170,7 +1197,7 @@ async def word_live_reject_revisions(
                         rejected += 1
                 return json.dumps({
                     "success": True,
-                    "document": doc.Name,
+                    "document": doc.Name, "document_path": _safe_fullname(doc),
                     "rejected": rejected,
                     "mode": f"by_author:{author}",
                 })
@@ -1179,7 +1206,7 @@ async def word_live_reject_revisions(
             doc.RejectAllRevisions()
             return json.dumps({
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "rejected": total,
                 "mode": "all",
             })
@@ -1279,7 +1306,7 @@ async def word_live_get_page_text(
         page_label = f"{page}" if page == end_page else f"{page}-{end_page}"
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "pages": page_label,
             "total_pages": total_pages,
             "paragraph_count": len(paragraphs),
@@ -1332,7 +1359,7 @@ async def word_live_get_undo_history(
             # Undocumented API — may not be available in all Word versions
             return json.dumps({
                 "success": True,
-                "document": doc.Name,
+                "document": doc.Name, "document_path": _safe_fullname(doc),
                 "undo_entries": [],
                 "count": 0,
                 "note": "Undo history not accessible in this Word version",
@@ -1340,7 +1367,7 @@ async def word_live_get_undo_history(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "undo_entries": entries,
             "count": len(entries),
         }, ensure_ascii=False)
@@ -1489,7 +1516,7 @@ async def word_live_diagnose_layout(
 
         return json.dumps({
             "success": True,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "total_paragraphs": total_paras,
             "issues": issues,
             "issue_count": len(issues),
@@ -1585,7 +1612,7 @@ async def word_live_set_core_properties(
 
         return json.dumps({
             "ok": len(errors) == 0,
-            "document": doc.Name,
+            "document": doc.Name, "document_path": _safe_fullname(doc),
             "changed": changes,
             "errors": errors or None,
         }, ensure_ascii=False)
