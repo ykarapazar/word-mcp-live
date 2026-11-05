@@ -9,6 +9,7 @@ Only works on macOS with Microsoft Word installed.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import unicodedata
