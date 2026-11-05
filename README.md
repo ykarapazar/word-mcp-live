@@ -6,7 +6,7 @@
 
 **The only MCP server that edits Word documents while they're open**
 
-`Live editing` &middot; `Tracked changes` &middot; `Per-action undo` &middot; `124 tools` &middot; `Cross-platform`
+`Live editing` &middot; `Tracked changes` &middot; `Per-action undo` &middot; `120 tools` &middot; `Cross-platform`
 
 [![PyPI](https://img.shields.io/pypi/v/word-mcp-live?color=blue)](https://pypi.org/project/word-mcp-live/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
@@ -56,7 +56,7 @@ https://github.com/user-attachments/assets/fbb09af4-1e25-4e49-94d0-45b363278810
 - **Threaded comments** — Add, reply, resolve, and delete comments like a human reviewer.
 - **Layout diagnostics** — Detects formatting problems before they become print disasters.
 - **Equations & cross-references** — Insert math formulas and auto-updating references.
-- **124 tools** — The most comprehensive Word MCP server available.
+- **120 tools** — The most comprehensive Word MCP server available.
 
 ## Quick Start
 
@@ -208,7 +208,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-> Note: Docker mode supports cross-platform tools only. Live editing requires a native Windows install.
+> Note: Docker mode supports cross-platform tools only. Live editing requires a native (non-Docker) install on Windows or macOS with Word running.
 
 </details>
 
@@ -235,9 +235,12 @@ Live tools now work on macOS via JavaScript for Automation (JXA). Same tool name
 | Formatting (bold, font, style) | COM | JXA |
 | Track changes & revisions | COM | JXA |
 | Comments (add, delete, list) | COM | JXA |
-| Tables (read, write, add rows) | COM | JXA |
+| Tables (add, read, modify rows/cells) | COM | JXA |
 | Page layout, headers, bookmarks | COM | JXA |
-| Equations, cross-references | COM | JXA |
+| Table formatting (`word_live_format_table`) | COM | Not available |
+| Images, multi-paragraph insert | COM | Not available |
+| Equations, cross-references | COM | Not available |
+| Snapshot diff/status, document properties | COM | Not available |
 | Threaded comment replies | COM | Not available |
 | Comment resolve/unresolve | COM | Not available |
 | Undo history inspection | COM | Not available |
@@ -336,13 +339,13 @@ The comment appears in Word's Review panel, anchored to the specified text.
 
 ## Tool Reference
 
-**124 tools** across two modes — see the [complete tool reference](TOOLS.md) for details.
+**120 tools** across two modes — see the [complete tool reference](TOOLS.md) for details.
 
 | Category | Count |
 |----------|-------|
-| Cross-platform (python-docx) | 80 |
-| Windows Live (COM automation) | 44 |
-| macOS Live (JXA automation) | 40 (of the 44 live tools) |
+| Cross-platform (python-docx) | 75 |
+| Windows Live (COM automation) | 45 (44 `word_live_*` + `word_screen_capture`) |
+| macOS Live (JXA automation) | 32 (of the 45 live tools) |
 
 ## Requirements
 

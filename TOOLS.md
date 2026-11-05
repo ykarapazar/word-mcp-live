@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete list of all 115 tools provided by word-mcp-live.
+Complete list of all 120 tools provided by word-mcp-live.
 
 ---
 
@@ -165,9 +165,11 @@ These work on Windows, macOS, and Linux using python-docx. The document file mus
 
 ---
 
-## Windows Live Tools
+## Live Tools
 
-These require Windows with Microsoft Word installed. They operate on documents **currently open in Word** via COM automation. Every tool call is a single Ctrl+Z entry in Word's undo stack.
+These require Microsoft Word to be running, on Windows (COM automation) or macOS (JXA). They operate on documents **currently open in Word**. On Windows, every tool call is a single Ctrl+Z entry in Word's undo stack.
+
+32 of the 45 live tools work on macOS. These 13 are **Windows only**: `word_live_insert_paragraphs`, `word_live_format_table`, `word_live_insert_image`, `word_live_insert_cross_reference`, `word_live_list_cross_reference_items`, `word_live_insert_equation`, `word_live_get_diff`, `word_live_snapshot_status`, `word_live_get_undo_history`, `word_live_set_core_properties`, `word_live_reply_to_comment`, `word_live_resolve_comment`, `word_live_add_watermark`.
 
 <details open>
 <summary><b>Editing</b></summary>
@@ -189,6 +191,7 @@ These require Windows with Microsoft Word installed. They operate on documents *
 | `word_live_insert_image` | Insert an image with sizing, alignment, wrapping, and optional border |
 | `word_live_insert_cross_reference` | Insert a live cross-reference to headings, bookmarks, figures, tables, equations, footnotes, or endnotes |
 | `word_live_insert_equation` | Insert a mathematical equation using UnicodeMath syntax |
+| `word_live_set_core_properties` | Set document properties (Title, Subject, Author, Keywords, etc.) |
 
 </details>
 
