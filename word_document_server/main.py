@@ -8,6 +8,7 @@ import os
 import sys
 from dotenv import load_dotenv
 from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
+from word_document_server import __version__
 
 # Load environment variables from .env file
 print("Loading configuration from .env file...", file=sys.stderr)
@@ -94,7 +95,7 @@ def setup_logging(debug_mode):
 
 
 # Initialize FastMCP server
-mcp = FastMCP("Word Document Server")
+mcp = FastMCP("Word Document Server", version=__version__)
 
 
 def register_tools():

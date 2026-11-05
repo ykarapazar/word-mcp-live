@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **`uvx word-mcp-live` failed** ("An executable named `word-mcp-live` is not provided by package `word-mcp-live`") because the only console script was `word_mcp_server`. Added a `word-mcp-live` console script (same entry point); `word_mcp_server` is kept for compatibility.
+- **MCP `serverInfo.version` reported the fastmcp version (4.x)** instead of the package version. It now reports the package version.
 - **macOS: wrong document** — `word_live_find_text`, `word_live_replace_text` and `word_live_insert_text` with `position="cursor"` used the front window's selection, so targeting a background document searched or edited the front one. They now activate the target and restore the previously active document. `word_live_add_comment` always used the active document and ignored `author`; it now targets the named document and sets the comment author.
 - **macOS control-character guard** — the `\x07`/control-byte check added in 1.6.0 for `word_live_insert_text`, `word_live_replace_text` and `word_live_find_text` only ran on Windows because the macOS branch returned first. It now runs before the platform branch.
 - **`word_live_insert_text` (macOS)** — a numeric `position` was interpolated unescaped into the JXA script; it is now parsed as an integer in Python, and non-numeric values return an error.
