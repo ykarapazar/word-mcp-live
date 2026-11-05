@@ -1094,6 +1094,15 @@ async def word_live_insert_paragraphs(
     if position not in ("before", "after"):
         return json.dumps({"error": f"position must be 'before' or 'after', got '{position}'"})
 
+    # Same control-byte guard as insert_text (\x07 etc. corrupt the document).
+    from word_document_server.utils.text_safety import reject_control_chars
+    try:
+        for i, para_text in enumerate(paragraphs):
+            reject_control_chars(f"paragraphs[{i}]", para_text)
+        reject_control_chars("target_text", target_text)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+
     try:
         from word_document_server.core.word_com import get_word_app, find_document, undo_record
 

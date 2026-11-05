@@ -761,6 +761,14 @@ async def word_live_add_comment(
     Returns:
         JSON with result info.
     """
+    # Control bytes (notably \x07) would be stored verbatim in the comment;
+    # reject them. Runs before the platform branch so macOS is guarded too.
+    from word_document_server.utils.text_safety import reject_control_chars
+    try:
+        reject_control_chars("text", text)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+
     if _MAC_AVAILABLE:
         from word_document_server.core.word_mac import mac_add_comment
         return mac_add_comment(filename=filename, start=start, end=end, paragraph_index=paragraph_index, text=text, author=author)
@@ -832,6 +840,14 @@ async def word_live_reply_to_comment(
     Returns:
         JSON with reply info.
     """
+    # Control bytes (notably \x07) would be stored verbatim in the comment;
+    # reject them.
+    from word_document_server.utils.text_safety import reject_control_chars
+    try:
+        reject_control_chars("text", text)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+
     if _MAC_AVAILABLE:
         return json.dumps({"error": "word_live_reply_to_comment is not available on macOS — the AppleScript dictionary does not expose this feature"})
 
