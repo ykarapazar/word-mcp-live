@@ -10,6 +10,7 @@ import re
 import sys
 
 from word_document_server.defaults import DEFAULT_AUTHOR
+from word_document_server.core.word_com import set_author, restore_author
 # macOS JXA dispatch
 _MAC_AVAILABLE = __import__('sys').platform == 'darwin'
 
@@ -72,10 +73,10 @@ async def word_live_insert_text(
 
         with undo_record(app, "MCP: Insert Text", doc):
             prev_tracking = doc.TrackRevisions
-            prev_author = app.UserName
+            prev_author = None
             if track_changes:
                 doc.TrackRevisions = True
-                app.UserName = DEFAULT_AUTHOR
+                prev_author = set_author(app, DEFAULT_AUTHOR)
 
             try:
                 chunks = [text[i:i + _INSERT_CHUNK_SIZE]
@@ -116,7 +117,7 @@ async def word_live_insert_text(
             finally:
                 if track_changes:
                     doc.TrackRevisions = prev_tracking
-                    app.UserName = prev_author
+                    restore_author(app, prev_author)
 
         result = {
             "success": True,
@@ -227,10 +228,10 @@ async def word_live_format_text(
 
         with undo_record(app, "MCP: Format Text", doc):
             prev_tracking = doc.TrackRevisions
-            prev_author = app.UserName
+            prev_author = None
             if track_changes:
                 doc.TrackRevisions = True
-                app.UserName = DEFAULT_AUTHOR
+                prev_author = set_author(app, DEFAULT_AUTHOR)
 
             try:
                 # Save direct formatting before style change if requested
@@ -309,7 +310,7 @@ async def word_live_format_text(
             finally:
                 if track_changes:
                     doc.TrackRevisions = prev_tracking
-                    app.UserName = prev_author
+                    restore_author(app, prev_author)
 
         preview = rng.Text
         if len(preview) > 50:
@@ -417,10 +418,10 @@ async def word_live_apply_list(
 
         with undo_record(app, "MCP: Apply List", doc):
             prev_tracking = doc.TrackRevisions
-            prev_author = app.UserName
+            prev_author = None
             if track_changes:
                 doc.TrackRevisions = True
-                app.UserName = DEFAULT_AUTHOR
+                prev_author = set_author(app, DEFAULT_AUTHOR)
 
             try:
                 formatted = 0
@@ -497,7 +498,7 @@ async def word_live_apply_list(
             finally:
                 if track_changes:
                     doc.TrackRevisions = prev_tracking
-                    app.UserName = prev_author
+                    restore_author(app, prev_author)
 
         action = "removed" if remove else f"applied {list_type}"
         return json.dumps({
@@ -988,10 +989,10 @@ async def word_live_replace_text(
 
         with undo_record(app, "MCP: Replace Text", doc):
             prev_tracking = doc.TrackRevisions
-            prev_author = app.UserName
+            prev_author = None
             if track_changes:
                 doc.TrackRevisions = True
-                app.UserName = DEFAULT_AUTHOR
+                prev_author = set_author(app, DEFAULT_AUTHOR)
             elif replace_all and prev_tracking:
                 # Issue #7: document has TrackRevisions on but caller wants
                 # untracked replace_all — disable temporarily to prevent
@@ -1033,7 +1034,7 @@ async def word_live_replace_text(
             finally:
                 doc.TrackRevisions = prev_tracking
                 if track_changes:
-                    app.UserName = prev_author
+                    restore_author(app, prev_author)
 
         return json.dumps({
             "success": True,
@@ -1124,10 +1125,10 @@ async def word_live_insert_paragraphs(
 
         with undo_record(app, "MCP: Insert Paragraphs", doc):
             prev_tracking = doc.TrackRevisions
-            prev_author = app.UserName
+            prev_author = None
             if track_changes:
                 doc.TrackRevisions = True
-                app.UserName = DEFAULT_AUTHOR
+                prev_author = set_author(app, DEFAULT_AUTHOR)
 
             try:
                 inserted = 0
@@ -1160,7 +1161,7 @@ async def word_live_insert_paragraphs(
             finally:
                 doc.TrackRevisions = prev_tracking
                 if track_changes:
-                    app.UserName = prev_author
+                    restore_author(app, prev_author)
 
         return json.dumps({
             "success": True,
@@ -1267,10 +1268,10 @@ async def word_live_add_table(
 
         with undo_record(app, "MCP: Add Table", doc):
             prev_tracking = doc.TrackRevisions
-            prev_author = app.UserName
+            prev_author = None
             if track_changes:
                 doc.TrackRevisions = True
-                app.UserName = DEFAULT_AUTHOR
+                prev_author = set_author(app, DEFAULT_AUTHOR)
 
             try:
                 # AutoFit behavior constants
@@ -1304,7 +1305,7 @@ async def word_live_add_table(
             finally:
                 if track_changes:
                     doc.TrackRevisions = prev_tracking
-                    app.UserName = prev_author
+                    restore_author(app, prev_author)
 
         return json.dumps(
             {
@@ -1542,10 +1543,10 @@ async def word_live_delete_text(
 
         with undo_record(app, "MCP: Delete Text", doc):
             prev_tracking = doc.TrackRevisions
-            prev_author = app.UserName
+            prev_author = None
             if track_changes:
                 doc.TrackRevisions = True
-                app.UserName = DEFAULT_AUTHOR
+                prev_author = set_author(app, DEFAULT_AUTHOR)
 
             try:
                 # Delete any table objects within the range first
@@ -1561,7 +1562,7 @@ async def word_live_delete_text(
             finally:
                 if track_changes:
                     doc.TrackRevisions = prev_tracking
-                    app.UserName = prev_author
+                    restore_author(app, prev_author)
 
         preview = deleted_text
         if len(preview) > 100:
@@ -1683,10 +1684,10 @@ async def word_live_modify_table(
         # All other operations are destructive
         with undo_record(app, "MCP: Modify Table", doc):
             prev_tracking = doc.TrackRevisions
-            prev_author = app.UserName
+            prev_author = None
             if track_changes:
                 doc.TrackRevisions = True
-                app.UserName = DEFAULT_AUTHOR
+                prev_author = set_author(app, DEFAULT_AUTHOR)
 
             try:
                 if op == "set_cell":
@@ -1744,7 +1745,7 @@ async def word_live_modify_table(
             finally:
                 if track_changes:
                     doc.TrackRevisions = prev_tracking
-                    app.UserName = prev_author
+                    restore_author(app, prev_author)
 
         result["success"] = True
         result["document"] = doc.Name

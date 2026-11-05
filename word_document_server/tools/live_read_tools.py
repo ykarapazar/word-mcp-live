@@ -11,7 +11,8 @@ import sys
 import time
 from difflib import SequenceMatcher
 
-from word_document_server.defaults import DEFAULT_AUTHOR
+from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
+from word_document_server.core.word_com import set_author, restore_author
 # macOS JXA dispatch
 _MAC_AVAILABLE = __import__('sys').platform == 'darwin'
 
@@ -792,18 +793,18 @@ async def word_live_add_comment(
 
         with undo_record(app, "MCP: Add Comment", doc):
             # Save and restore author
-            prev_author = app.UserName
-            app.UserName = author
+            prev_author = set_author(app, author, DEFAULT_INITIALS)
             try:
                 comment = doc.Comments.Add(rng, text)
             finally:
-                app.UserName = prev_author
+                restore_author(app, prev_author)
 
         return json.dumps({
             "success": True,
             "document": doc.Name,
             "comment_index": comment.Index,
-            "author": author,
+            # Report what Word stored, not what was requested.
+            "author": str(comment.Author),
             "text": text[:100],
         }, ensure_ascii=False)
 
@@ -856,8 +857,7 @@ async def word_live_reply_to_comment(
         comment = doc.Comments(comment_index)
 
         with undo_record(app, "MCP: Reply to Comment", doc):
-            prev_author = app.UserName
-            app.UserName = author
+            prev_author = set_author(app, author, DEFAULT_INITIALS)
             try:
                 reply = comment.Replies.Add(comment.Scope, text)
             except AttributeError:
@@ -865,7 +865,7 @@ async def word_live_reply_to_comment(
                     "error": "Comment replies require Word 2016 or later."
                 })
             finally:
-                app.UserName = prev_author
+                restore_author(app, prev_author)
 
         return json.dumps({
             "success": True,
@@ -873,7 +873,7 @@ async def word_live_reply_to_comment(
             "comment_index": comment_index,
             "reply_text": text[:100],
             "reply_index": reply.Index,
-            "author": author,
+            "author": str(reply.Author),
         }, ensure_ascii=False)
 
     except Exception as e:

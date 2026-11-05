@@ -201,3 +201,37 @@ def undo_record(app, name: str, doc=None):
                 prev.Activate()
             except Exception:
                 pass
+
+
+def set_author(app, name: str, initials: str = None):
+    """Make Word attribute new revisions and comments to *name*.
+
+    Word ignores Application.UserName when the user is signed in to Office,
+    unless Options.UseLocalUserInfo ("Always use these values regardless of
+    sign in to Office") is on. Turn it on for the duration of the edit.
+    Returns the previous state for restore_author().
+    """
+    state = {"name": app.UserName, "initials": None, "local": None}
+    try:
+        state["local"] = app.Options.UseLocalUserInfo
+        if not state["local"]:
+            app.Options.UseLocalUserInfo = True
+    except Exception:
+        state["local"] = None  # Word 2013 or earlier: no such option
+    app.UserName = name
+    if initials:
+        state["initials"] = app.UserInitials
+        app.UserInitials = initials
+    return state
+
+
+def restore_author(app, state) -> None:
+    """Undo set_author()."""
+    app.UserName = state["name"]
+    if state["initials"] is not None:
+        app.UserInitials = state["initials"]
+    if state["local"] is False:
+        try:
+            app.Options.UseLocalUserInfo = False
+        except Exception:
+            pass
