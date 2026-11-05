@@ -533,7 +533,7 @@ async def word_live_setup_heading_numbering(
     h2_space_after: float = None,
     line_spacing: float = None,
 ) -> str:
-    """[Windows only] Set up auto-numbered headings with multilevel list (1. / 1.1).
+    r"""[Windows only] Set up auto-numbered headings with multilevel list (1. / 1.1).
 
     Creates a multilevel list template linked to Heading 1 and Heading 2 styles.
     Default formats: Level 1 = "%1." (produces "1."), Level 2 = "%1.%2" (produces "1.1").
