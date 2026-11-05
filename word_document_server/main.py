@@ -37,6 +37,68 @@ from word_document_server.tools import (
 from word_document_server.tools.content_tools import replace_paragraph_block_below_header_tool
 from word_document_server.tools.content_tools import replace_block_between_manual_anchors_tool
 
+
+# ---------------------------------------------------------------------------
+# Live (COM / JXA) tools: run off the event loop on one dedicated thread.
+# The tool bodies are synchronous COM calls inside `async def`, so awaiting
+# them on the loop blocks every other request (pings, cancellations, other
+# tools). One worker keeps COM single-apartment and serialises Word access.
+# ---------------------------------------------------------------------------
+import asyncio
+import functools
+import json as _json
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from fastmcp.exceptions import ToolError
+
+
+def _com_thread_init():
+    if sys.platform == "win32":
+        import pythoncom
+        pythoncom.CoInitialize()
+
+
+_LIVE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="word-live",
+                                    initializer=_com_thread_init)
+_on_live_thread = threading.local()
+
+
+def _raise_if_error(result):
+    """Turn the tools' {"error": ...} JSON into an MCP isError result (same text)."""
+    if isinstance(result, str) and result.startswith('{"error"'):
+        try:
+            payload = _json.loads(result)
+        except ValueError:
+            return result
+        if isinstance(payload, dict) and "error" in payload and not payload.get("success"):
+            raise ToolError(result)
+    return result
+
+
+def _offload(fn):
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        if getattr(_on_live_thread, "active", False):  # nested call from another live tool
+            return await fn(*args, **kwargs)
+
+        def run():
+            _on_live_thread.active = True
+            try:
+                return asyncio.run(fn(*args, **kwargs))
+            finally:
+                _on_live_thread.active = False
+
+        result = await asyncio.get_running_loop().run_in_executor(_LIVE_EXECUTOR, run)
+        return _raise_if_error(result)
+    return wrapper
+
+
+for _mod in (live_tools, live_read_tools, live_layout_tools, screen_capture_tools):
+    for _name in dir(_mod):
+        _obj = getattr(_mod, _name)
+        if _name.startswith("word_") and asyncio.iscoroutinefunction(_obj):
+            setattr(_mod, _name, _offload(_obj))
+
 def get_transport_config():
     """
     Get transport configuration from environment variables.
