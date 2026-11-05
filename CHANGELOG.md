@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SyntaxWarning: invalid escape sequence` in the `word_live_setup_heading_numbering` docstring (now a raw string; description text unchanged).
 - `test_formatting.py` now runs under pytest (it was an `async def` test with no async plugin).
 - **`word_live_setup_heading_numbering` (macOS)** failed with `NameError: name 're' is not defined`; the missing import is added.
+- **macOS: two open documents with the same name** (from different folders) — Word for Mac binds ranges to the document name, so edits and finds could hit the other file even when a full path was given. Tools now refuse with a clear error until only one is open.
 - **macOS: Word not responding** — an osascript timeout surfaced as a raw `TimeoutExpired` traceback. It now returns a clear message (Word may be showing a dialog or still busy with the previous request).
 
 ### Changed

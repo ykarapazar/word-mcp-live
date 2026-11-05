@@ -148,6 +148,10 @@ if (!d) {{
     for (var _j = 0; _j < app.documents.length; _j++) _open.push(app.documents[_j].name());
     throw new Error("Document '" + target + "' not open. Open: " + _open.join(", "));
 }}
+// Word for Mac returns ranges bound to documents.byName(), so two open
+// documents with the same name cannot be told apart reliably.
+var _same = app.documents.name().filter(function (n) {{ return n.normalize("NFC").toLowerCase() === target; }}).length;
+if (_same > 1) throw new Error("Two or more open documents are named '" + d.name() + "' (different folders). Word for Mac cannot address them separately; close all but one.");
 """
 
 
