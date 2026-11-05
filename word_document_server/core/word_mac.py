@@ -416,18 +416,20 @@ try {{
     f.clearFormatting();
     f.replacement.clearFormatting();
     f.replacement.content = "";
+    // Find settings persist across executeFind calls; set them once
+    f.content = "{escaped_search}";
+    f.forward = true;
+    f.wrap = "find stop";
+    f.matchCase = {"true" if match_case else "false"};
+    f.matchWholeWord = {"true" if whole_word else "false"};
+    f.matchWildcards = {"true" if use_wildcards else "false"};
+    var docEnd = d.textObject.endOfContent();
     for (var i = 0; i < {max_results}; i++) {{
-        f.content = "{escaped_search}";
-        f.forward = true;
-        f.wrap = "find stop";
-        f.matchCase = {"true" if match_case else "false"};
-        f.matchWholeWord = {"true" if whole_word else "false"};
-        f.matchWildcards = {"true" if use_wildcards else "false"};
         if (!f.executeFind()) break;
         var s = sel.selectionStart();
         var e = sel.selectionEnd();
         var ctxStart = Math.max(0, s - {context_chars});
-        var ctxEnd = Math.min(d.textObject.endOfContent(), e + {context_chars});
+        var ctxEnd = Math.min(docEnd, e + {context_chars});
         var ctxRange = d.createRange({{start: ctxStart, end: ctxEnd}});
         results.push({{
             text: sel.content(),
