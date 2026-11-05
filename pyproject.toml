@@ -49,3 +49,4 @@ sources = ["."]
 
 [project.scripts]
 word_mcp_server = "word_document_server.main:run_server"
+word-mcp-live = "word_document_server.main:run_server"
