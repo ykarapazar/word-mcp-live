@@ -1252,7 +1252,9 @@ def mac_add_table(
     (app.createRange(d, ...) raises -1708) and be passed as textObject in
     withProperties (otherwise Word ignores the row/column counts). The object
     make() returns is not usable with getCellFromTable, so the new table is
-    re-fetched from d.tables by position before styling/filling it.
+    re-fetched from d.tables by position before styling/filling it. make()
+    fails with -1708 unless `d` is the active document, so `d` is activated
+    and the previous document re-activated afterwards.
     """
     finder = _doc_finder_js(filename)
     if position == "start":
@@ -1305,6 +1307,7 @@ var app = Application("Microsoft Word");
 var prevTracking = d.trackRevisions();
 if ({"true" if track_changes else "false"}) d.trackRevisions = true;
 var t = null;
+{_ACTIVATE_TARGET_JS}
 try {{
     var rng = d.createRange({{start: pos, end: pos}});
     app.make({{new: "table", at: d, withProperties: {{
@@ -1321,6 +1324,7 @@ try {{
     {data_js}
 }} finally {{
     d.trackRevisions = prevTracking;
+    {_RESTORE_ACTIVE_JS}
 }}
 JSON.stringify({{success: true, added: true, document: d.name(), rows: t.rows.length, cols: t.columns.length,
     tables: d.tables.length, position: {json.dumps(str(position))},
