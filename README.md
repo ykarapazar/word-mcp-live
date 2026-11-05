@@ -191,6 +191,30 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 </details>
 
 <details>
+<summary><b>OpenAI Codex (CLI, desktop app, IDE)</b></summary>
+
+```bash
+codex mcp add word --env MCP_AUTHOR="Your Name" -- uvx word-mcp-live
+```
+
+Or add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.word]
+command = "uvx"
+args = ["word-mcp-live"]
+startup_timeout_sec = 60
+tool_timeout_sec = 120
+
+[mcp_servers.word.env]
+MCP_AUTHOR = "Your Name"
+```
+
+In the desktop app: Settings → MCP servers → Add server. On Windows, run Codex natively, not under WSL — live tools need native Windows.
+
+</details>
+
+<details>
 <summary><b>Docker</b></summary>
 
 ```json
