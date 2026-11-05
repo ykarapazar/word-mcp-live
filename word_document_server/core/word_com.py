@@ -115,6 +115,8 @@ def find_document(app, filename: str = None):
         app: Word.Application COM object.
         filename: Document name (basename) or full path.
                   If None or empty, returns the active document.
+                  A basename shared by two open documents is refused;
+                  a full path picks the exact one.
 
     Returns:
         Document COM object.
@@ -134,12 +136,22 @@ def find_document(app, filename: str = None):
         if os.path.isabs(filename) else None
     )
 
-    for i in range(1, app.Documents.Count + 1):
-        doc = app.Documents(i)
-        if unicodedata.normalize('NFC', doc.Name).lower() == target_basename:
-            return doc
-        if target_fullpath and unicodedata.normalize('NFC', os.path.normpath(doc.FullName)).lower() == target_fullpath:
-            return doc
+    docs = [app.Documents(i) for i in range(1, app.Documents.Count + 1)]
+    if target_fullpath:
+        for doc in docs:
+            if unicodedata.normalize('NFC', os.path.normpath(doc.FullName)).lower() == target_fullpath:
+                return doc
+
+    same_name = [doc for doc in docs
+                 if unicodedata.normalize('NFC', doc.Name).lower() == target_basename]
+    if len(same_name) == 1:
+        return same_name[0]
+    if len(same_name) > 1:
+        raise ValueError(
+            f"Two or more open documents are named '{same_name[0].Name}': "
+            f"{[d.FullName for d in same_name]}. "
+            "Pass the full path as filename to choose one."
+        )
 
     open_docs = [app.Documents(i).Name for i in range(1, app.Documents.Count + 1)]
     raise ValueError(
