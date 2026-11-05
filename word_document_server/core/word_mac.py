@@ -51,6 +51,10 @@ def _run_jxa(script: str, timeout: int = 30) -> str:
         # Provide cleaner error messages
         if "is not running" in stderr or "Connection is invalid" in stderr:
             raise RuntimeError("Microsoft Word is not running. Please open Word first.")
+        # Errors our own scripts throw (-2700) carry a readable message; drop the wrapper.
+        m = re.match(r"^execution error: Error: (?:Error: )?(.*) \(-2700\)$", stderr, re.S)
+        if m:
+            raise RuntimeError(m.group(1))
         raise RuntimeError(f"JXA error: {stderr}")
     return result.stdout.strip()
 
@@ -152,6 +156,13 @@ if (!d) {{
 // documents with the same name cannot be told apart reliably.
 var _same = app.documents.name().filter(function (n) {{ return n.normalize("NFC").toLowerCase() === target; }}).length;
 if (_same > 1) throw new Error("Two or more open documents are named '" + d.name() + "' (different folders). Word for Mac cannot address them separately; close all but one.");
+"""
+
+
+# Word for Mac answers content writes and save() on a read-only document with a
+# bare -1708 "Message not understood"; check first and say what is wrong.
+_WRITABLE_JS = """
+if (d.readOnly()) throw new Error("'" + d.name() + "' is open read-only in Word, so it cannot be changed or saved to its own path. Reopen it with write access, or use save_as with a new path.");
 """
 
 
@@ -292,6 +303,7 @@ JSON.stringify({{saved: true, path: "{escaped_path}"}});
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
+{_WRITABLE_JS}
 d.save();
 JSON.stringify({{saved: true, name: d.name()}});
 """)
@@ -466,6 +478,7 @@ var app = Application("Microsoft Word");
 // d.paragraphs() resolves every paragraph (tens of seconds on long documents);
 // address only the requested ones by index instead.
 var paraCount = d.paragraphs.length;
+var includeRuns = {"true" if include_runs else "false"};
 var startP = {start_paragraph};
 var endP = {ep} !== null ? {ep} : startP;
 endP = Math.min(endP, paraCount - 1);
@@ -490,7 +503,26 @@ for (var i = startP; i <= endP; i++) {{
         bold: fo.bold,
         italic: fo.italic
     }};
-    try {{ info.style = p.style(); }} catch(e) {{}}
+    // p.style() is an object specifier, not a name
+    try {{ info.style = p.style.nameLocal(); }} catch(e) {{}}
+    if (includeRuns) {{
+        // Same shape as Windows: consecutive words with identical formatting
+        // are grouped into one run (two Apple Events per word).
+        try {{
+            var ws = p.textObject.words, runs = [], cur = null;
+            var mixed = function (x) {{ return (x === 9999999 || x === "9999999") ? "mixed" : x; }};
+            for (var k = 0, nw = ws.length; k < nw; k++) {{
+                var wfo = ws[k].fontObject.properties();
+                var f = {{bold: mixed(wfo.bold), italic: mixed(wfo.italic), font_name: mixed(wfo.name), font_size: mixed(wfo.fontSize)}};
+                var key = JSON.stringify(f), wt = ws[k].content();
+                if (cur && cur._k === key) {{ cur.text += wt; continue; }}
+                if (cur) {{ delete cur._k; runs.push(cur); }}
+                cur = {{text: wt, bold: f.bold, italic: f.italic, font_name: f.font_name, font_size: f.font_size, _k: key}};
+            }}
+            if (cur) {{ delete cur._k; runs.push(cur); }}
+            info.runs = runs;
+        }} catch (e) {{ info.runs_error = "Could not read word-level formatting"; }}
+    }}
     results.push(info);
 }}
 JSON.stringify({{paragraphs: results}});
@@ -594,6 +626,7 @@ def mac_insert_text(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
+{_WRITABLE_JS}
 var text = "{escaped}";
 var prevTracking = d.trackRevisions();
 if ({"true" if track_changes else "false"}) d.trackRevisions = true;
@@ -617,6 +650,7 @@ def mac_delete_text(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
+{_WRITABLE_JS}
 var prevTracking = d.trackRevisions();
 if ({"true" if track_changes else "false"}) d.trackRevisions = true;
 try {{
@@ -1058,6 +1092,7 @@ def mac_add_header_footer(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
+{_WRITABLE_JS}
 var s = d.sections[Math.max(0, {section_index} - 1)];  // 1-based → 0-based
 {header_js}
 {footer_js}
@@ -1100,6 +1135,7 @@ def mac_add_page_numbers(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
+{_WRITABLE_JS}
 var secIdx = Math.max(0, {section_index} - 1);  // 1-based → 0-based
 if (secIdx >= d.sections.length) throw new Error("Section {section_index} out of range (1-" + d.sections.length + ")");
 var hf = app.{getter}(d.sections[secIdx], {{index: "header footer primary"}});
@@ -1113,16 +1149,30 @@ JSON.stringify({{success: true, document: d.name(), section: secIdx + 1, positio
 """)
 
 
-def mac_add_section_break(filename: str = None, break_type: str = "section break next page") -> str:
-    """Insert a section break."""
+_MAC_BREAK_TYPES = {
+    "new_page": "section break next page",
+    "continuous": "section break continuous",
+    "even_page": "section break even page",
+    "odd_page": "section break odd page",
+}
+
+
+def mac_add_section_break(filename: str = None, break_type: str = "new_page") -> str:
+    """Insert a section break at the end of the document.
+
+    insert break takes the range as its `at` parameter; passing it as the
+    direct parameter (as before) fails with -1708.
+    """
+    if break_type not in _MAC_BREAK_TYPES:
+        return json.dumps({"error": f"Invalid break_type: {break_type}. Use: {list(_MAC_BREAK_TYPES)}"})
     finder = _doc_finder_js(filename)
-    escaped_type = _escape_js(break_type)
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var lastPara = d.paragraphs[d.paragraphs.length - 1];
-app.insertBreak(lastPara.textObject, {{breakType: "{escaped_type}"}});
-JSON.stringify({{sections: d.sections.length}});
+{_WRITABLE_JS}
+var endPos = d.textObject.endOfContent() - 1;
+app.insertBreak({{at: d.createRange({{start: endPos, end: endPos}}), breakType: "{_MAC_BREAK_TYPES[break_type]}"}});
+JSON.stringify({{success: true, document: d.name(), break_type: "{break_type}", sections: d.sections.length}});
 """)
 
 
@@ -1208,12 +1258,25 @@ def mac_add_table(
     if position == "start":
         pos_js = "var pos = 0;"
     elif position == "end":
-        pos_js = "var pos = d.textObject.endOfContent() - 1;"
+        # When the document already ends with a table, the last position sits
+        # on the table boundary and Word would merge the new table into it
+        # (the re-fetch then fails with -1728); add a paragraph to separate them.
+        pos_js = """var pos = d.textObject.endOfContent() - 1;
+if (pos > 0 && d.createRange({start: pos - 1, end: pos}).tables.length > 0) {
+    d.createRange({start: pos, end: pos}).content = "\\r";
+    pos = d.textObject.endOfContent() - 1;
+}"""
     else:
         try:
-            pos_js = f"var pos = {int(position)};"
+            offset = int(position)
         except (TypeError, ValueError):
             return json.dumps({"error": f"Invalid position: {position}"})
+        # Same rule as Windows: an offset inside an existing table would merge.
+        pos_js = f"""var pos = {offset};
+for (var _t = 0; _t < d.tables.length; _t++) {{
+    var _ts = d.tables[_t].textObject.startOfContent(), _te = d.tables[_t].textObject.endOfContent();
+    if (_ts <= pos && pos <= _te) throw new Error("position offset " + pos + " falls within an existing table at range [" + _ts + ", " + _te + "]. Choose an offset outside any table, or use position='end'/'start'.");
+}}"""
 
     autofit_map = {"window": "auto fit window", "content": "auto fit content", "fixed": "auto fit fixed"}
     autofit_js = ""
@@ -1237,6 +1300,7 @@ def mac_add_table(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
+{_WRITABLE_JS}
 {pos_js}
 var prevTracking = d.trackRevisions();
 if ({"true" if track_changes else "false"}) d.trackRevisions = true;
@@ -1251,7 +1315,7 @@ try {{
     for (var ti = 0; ti < d.tables.length; ti++) {{  // re-fetch: first table at/after pos
         if (d.tables[ti].textObject.startOfContent() >= pos) {{ t = d.tables[ti]; break; }}
     }}
-    if (!t) t = d.tables[d.tables.length - 1];
+    if (!t) throw new Error("Word did not create a separate table at position " + pos + " (it may have merged it into an adjacent table).");
     {style_js}
     {autofit_js}
     {data_js}
@@ -1285,8 +1349,8 @@ def mac_modify_table(
     the active one (activateObject; the previous document is re-activated
     afterwards).
     """
-    finder = _doc_finder_js(filename)
     op = (operation or "").lower()
+    finder = _doc_finder_js(filename) + ("" if op == "get_info" else _WRITABLE_JS)
     track_js = "true" if track_changes else "false"
     table_js = f"""
 var tCount = d.tables.length;
@@ -1492,7 +1556,7 @@ def mac_apply_list(
         return json.dumps({"error": "start_paragraph required"})
     ep = end_paragraph or start_paragraph
 
-    finder = _doc_finder_js(filename)
+    finder = _doc_finder_js(filename) + _WRITABLE_JS
 
     if remove:
         # Bulk removal: build ONE range spanning all target paragraphs, call
@@ -1818,12 +1882,12 @@ JSON.stringify({{applied: true, type: "multilevel", count: applied}});
 """, timeout=120)
 
     else:
-        gallery_idx = 0 if list_type == "bullet" else 1
+        gallery = "bullet gallery" if list_type == "bullet" else "number gallery"
         return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var gallery = app.listGalleries[{gallery_idx}];
-var lt = gallery.listTemplates[0];
+// app.listGalleries is empty on Word for Mac; getListGallery returns the gallery.
+var lt = app.getListGallery("{gallery}").listTemplates[0];
 for (var i = {start_paragraph - 1}; i < {ep}; i++) {{
     var p = d.paragraphs[i];
     var r = d.createRange({{start: p.textObject.startOfContent(), end: p.textObject.endOfContent()}});
@@ -1911,7 +1975,7 @@ def mac_setup_heading_numbering(
     if not h1_paragraphs and not h2_paragraphs:
         return json.dumps({"error": "Provide h1_paragraphs and/or h2_paragraphs (or heading_map)"})
 
-    finder = _doc_finder_js(filename)
+    finder = _doc_finder_js(filename) + _WRITABLE_JS
     h1_fmt = _escape_js(h1_number_format or "%1.")
     h2_fmt = _escape_js(h2_number_format or "%1.%2")
 
