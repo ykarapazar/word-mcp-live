@@ -7,9 +7,8 @@ from word_document_server.tools.content_tools import add_paragraph, add_heading
 from word_document_server.tools.document_tools import create_document
 
 
-async def test_formatting():
+async def run_formatting(test_doc='test_formatting.docx'):
     """Test the new formatting parameters."""
-    test_doc = 'test_formatting.docx'
 
     # Create test document
     print("Creating test document...")
@@ -102,7 +101,17 @@ async def test_formatting():
 
     print("\n✅ All tests completed successfully!")
     print(f"Open {test_doc} in Word to verify the formatting visually.")
+    return verify_doc
+
+
+def test_formatting(tmp_path):
+    """pytest entry point: same pattern as tests/test_convert_to_pdf.py (asyncio.run)."""
+    doc = asyncio.run(run_formatting(str(tmp_path / 'test_formatting.docx')))
+    name = next(p for p in doc.paragraphs if p.text == "JAMES MEHORTER")
+    assert name.runs[0].font.name == "Helvetica"
+    assert name.runs[0].font.size.pt == 36
+    assert name.runs[0].font.bold is True
 
 
 if __name__ == "__main__":
-    asyncio.run(test_formatting())
+    asyncio.run(run_formatting())
