@@ -15,8 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`word_live_insert_text` (macOS)** — a numeric `position` was interpolated unescaped into the JXA script; it is now parsed as an integer in Python, and non-numeric values return an error.
 - `SyntaxWarning: invalid escape sequence` in the `word_live_setup_heading_numbering` docstring (now a raw string; description text unchanged).
 - `test_formatting.py` now runs under pytest (it was an `async def` test with no async plugin).
+- **`word_live_setup_heading_numbering` (macOS)** failed with `NameError: name 're' is not defined`; the missing import is added.
+- **macOS: Word not responding** — an osascript timeout surfaced as a raw `TimeoutExpired` traceback. It now returns a clear message (Word may be showing a dialog or still busy with the previous request).
 
 ### Changed
+- **macOS speed** (same output): `word_live_get_paragraph_format` and `word_live_diagnose_layout` no longer resolve the whole paragraph collection (about 3.5× and 2.6× faster on a 400-paragraph document; a 200-paragraph range of a 5,000-paragraph document now takes about 17 s where it used to time out); `word_live_get_page_text` locates pages with `goToNext` instead of a binary search (page 50 of a 5,000-paragraph document now takes 1.6 s where it used to time out); `word_live_find_text` sets its find options once per call.
 - Tool descriptions: 32 live tools that work on macOS were labelled "[Windows only]"; they now say "[Requires Word open — Windows or macOS]". The 13 live tools with no macOS path are labelled "[Windows only]". No tool names or parameters changed.
 - Packaging: `pytest` moved from runtime dependencies to the `dev` dependency group; `python-dotenv` (imported by `main.py`) is now declared; `requirements.txt` mirrors the `pyproject.toml` runtime dependencies.
 - `manifest.json`: version, tool count, `compatibility.platforms` (`darwin`, `win32`) and `privacy_policies`. `server.json`: version, tool count, and env var default descriptions matching the code (`MCP_AUTHOR` defaults to `Author`, initials empty).
