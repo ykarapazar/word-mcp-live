@@ -7,12 +7,13 @@ Supports multiple transports: stdio, sse, and streamable-http using standalone F
 import os
 import sys
 from dotenv import load_dotenv
-from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
-from word_document_server import __version__
 
-# Load environment variables from .env file
+# Load environment variables from .env file. This must run before anything
+# imports word_document_server.defaults, which reads MCP_AUTHOR at import time.
 print("Loading configuration from .env file...", file=sys.stderr)
 load_dotenv()
+from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
+from word_document_server import __version__
 # Set required environment variable for FastMCP 2.8.1+
 os.environ.setdefault('FASTMCP_LOG_LEVEL', 'INFO')
 from fastmcp import FastMCP
