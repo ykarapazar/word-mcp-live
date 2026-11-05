@@ -514,9 +514,13 @@ def mac_insert_text(
     sel.content = text;
 """
     else:
-        # Numeric position
+        # Numeric position — coerce in Python so nothing unescaped reaches JS
+        try:
+            pos = int(str(position).strip())
+        except ValueError:
+            return json.dumps({"error": f"Invalid position: {position!r} (use 'start', 'end', 'cursor' or a character offset)"})
         bookmark_js = f"""
-    var pos = parseInt("{position}");
+    var pos = {pos};
     var r = d.createRange({{start: pos, end: pos}});
     r.content = text;
 """

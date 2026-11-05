@@ -550,6 +550,15 @@ async def word_live_find_text(
     Returns:
         JSON with list of matches (position, context).
     """
+    # Same control-byte hazard as replace_text: \x07 and other control
+    # bytes corrupt Word's Find engine. Reject before issuing Find.Execute.
+    # Runs before the platform branch so macOS is guarded too.
+    from word_document_server.utils.text_safety import reject_control_chars
+    try:
+        reject_control_chars("search_text", search_text)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+
     if _MAC_AVAILABLE:
         from word_document_server.core.word_mac import mac_find_text
         return mac_find_text(filename=filename, search_text=search_text, match_case=match_case, whole_word=whole_word, use_wildcards=use_wildcards, context_chars=context_chars, max_results=max_results)
@@ -559,14 +568,6 @@ async def word_live_find_text(
 
     if not search_text:
         return json.dumps({"error": "search_text is required"})
-
-    # Same control-byte hazard as replace_text: \x07 and other control
-    # bytes corrupt Word's Find engine. Reject before issuing Find.Execute.
-    from word_document_server.utils.text_safety import reject_control_chars
-    try:
-        reject_control_chars("search_text", search_text)
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
 
     try:
         from word_document_server.core.word_com import get_word_app, find_document

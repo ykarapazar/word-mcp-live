@@ -43,6 +43,16 @@ async def word_live_insert_text(
     Returns:
         JSON with result info.
     """
+    # Reject control bytes (notably \x07 cell separator) — inserting
+    # these outside a real table creates invalid document state that
+    # subsequent Find/Replace and table operations cannot recover from.
+    # Runs before the platform branch so macOS is guarded too.
+    from word_document_server.utils.text_safety import reject_control_chars
+    try:
+        reject_control_chars("text", text)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+
     if _MAC_AVAILABLE:
         from word_document_server.core.word_mac import mac_insert_text
         return mac_insert_text(filename=filename, text=text, position=position, bookmark=bookmark, track_changes=track_changes)
@@ -59,15 +69,6 @@ async def word_live_insert_text(
         # Convert literal escape sequences to actual characters.
         # MCP/JSON sends backslash-r as 2 chars; Word COM needs chr(13) for paragraph marks.
         text = text.replace("\\r\\n", "\r").replace("\\r", "\r").replace("\\n", "\r")
-
-        # Reject control bytes (notably \x07 cell separator) — inserting
-        # these outside a real table creates invalid document state that
-        # subsequent Find/Replace and table operations cannot recover from.
-        from word_document_server.utils.text_safety import reject_control_chars
-        try:
-            reject_control_chars("text", text)
-        except ValueError as e:
-            return json.dumps({"error": str(e)})
 
         with undo_record(app, "MCP: Insert Text"):
             prev_tracking = doc.TrackRevisions
@@ -941,6 +942,16 @@ async def word_live_replace_text(
     Returns:
         JSON with count of replacements made.
     """
+    # Reject control bytes (notably \x07 cell separator) that can corrupt
+    # Find/Replace and have historically caused full-document data loss.
+    # Runs before the platform branch so macOS is guarded too.
+    from word_document_server.utils.text_safety import reject_control_chars
+    try:
+        reject_control_chars("find_text", find_text)
+        reject_control_chars("replace_text", replace_text)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+
     if _MAC_AVAILABLE:
         from word_document_server.core.word_mac import mac_replace_text
         return mac_replace_text(filename=filename, find_text=find_text, replace_text=replace_text, match_case=match_case, match_whole_word=match_whole_word, use_wildcards=use_wildcards, replace_all=replace_all, track_changes=track_changes)
@@ -961,15 +972,6 @@ async def word_live_replace_text(
             "error": f"replace_text is {len(replace_text)} chars (Word limit: 255). "
             "Break into smaller find/replace pairs."
         })
-
-    # Reject control bytes (notably \x07 cell separator) that can corrupt
-    # Find/Replace and have historically caused full-document data loss.
-    from word_document_server.utils.text_safety import reject_control_chars
-    try:
-        reject_control_chars("find_text", find_text)
-        reject_control_chars("replace_text", replace_text)
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
 
     if replace_all and track_changes:
         return json.dumps({
