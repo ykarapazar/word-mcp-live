@@ -5,6 +5,101 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.22] - Unreleased
+
+### Fixed
+- **macOS control-character guard** — the `\x07`/control-byte check added in 1.6.0 for `word_live_insert_text`, `word_live_replace_text` and `word_live_find_text` only ran on Windows because the macOS branch returned first. It now runs before the platform branch.
+- **`word_live_insert_text` (macOS)** — a numeric `position` was interpolated unescaped into the JXA script; it is now parsed as an integer in Python, and non-numeric values return an error.
+- `SyntaxWarning: invalid escape sequence` in the `word_live_setup_heading_numbering` docstring (now a raw string; description text unchanged).
+- `test_formatting.py` now runs under pytest (it was an `async def` test with no async plugin).
+
+### Changed
+- Tool descriptions: 32 live tools that work on macOS were labelled "[Windows only]"; they now say "[Requires Word open — Windows or macOS]". The 13 live tools with no macOS path are labelled "[Windows only]". No tool names or parameters changed.
+- Packaging: `pytest` moved from runtime dependencies to the `dev` dependency group; `python-dotenv` (imported by `main.py`) is now declared; `requirements.txt` mirrors the `pyproject.toml` runtime dependencies.
+- `manifest.json`: version, tool count, `compatibility.platforms` (`darwin`, `win32`) and `privacy_policies`. `server.json`: version, tool count, and env var default descriptions matching the code (`MCP_AUTHOR` defaults to `Author`, initials empty).
+- `word_document_server.__version__` was still `1.2.0`; now matches the package version.
+- README / TOOLS.md: tool counts corrected to 120 (75 cross-platform + 44 `word_live_*` + `word_screen_capture`; 32 of the 45 live tools on macOS), macOS feature table corrected, missing `word_live_set_core_properties` added to TOOLS.md, OpenAI Codex install instructions added.
+
+## [1.6.21] - 2026-10-06
+
+### Fixed
+- **`word_live_format_text` (macOS)** — `highlight_color=0` was skipped as falsy and integer colours were passed as invalid JXA enum strings (silently clearing highlight). Values 0–16 now map to WdColorIndex names; invalid values are rejected.
+- macOS parity: `word_live_modify_table` `add_row` / `delete_row` / `set_row` and multi-paragraph `set_cell`; `word_live_add_table` via `createRange` + `textObject`; `NameError` in `word_live_set_page_layout`; `word_live_add_page_numbers` via `createNewField`.
+
+### Changed
+- Dependencies: `fastmcp>=4.0.11`, `python-docx>=1.2.0`, `msoffcrypto-tool>=6.0.0`; `uv.lock` refreshed.
+
+## [1.6.20] - 2026-05-29
+
+### Fixed
+- `word_live_setup_heading_numbering` (macOS) — applies the list template to each heading paragraph explicitly, since `linkedStyle` assignment is unreliable in JXA.
+
+## [1.6.19] - 2026-05-29
+
+### Added
+- `outline_numbered=false` option on `word_live_apply_list`, for lists that must stay independent of the heading outline numbering.
+
+## [1.6.17] - 2026-05-28
+
+### Added
+- `word_live_setup_heading_numbering` accepts `heading_map` (`{text: level}`, same shape as `word_live_apply_list`).
+
+### Changed
+- List-template levels are linked to `Heading 1` / `Heading 2` styles instead of `Normal`; Level 2 restarts after each Level 1.
+
+## [1.6.16] - 2026-05-28
+
+### Fixed
+- VBA escaping for the macOS header/footer list cleanup.
+
+## [1.6.15] - 2026-05-28
+
+### Fixed
+- macOS header/footer list cleanup now uses `do Visual Basic`, because JXA header/footer accessors are unreliable on Word for Mac.
+
+## [1.6.14] - 2026-05-28
+
+### Fixed
+- `word_live_apply_list` (macOS): no longer resets the Level 1 counter (duplicate numbers); clears runaway list formatting from headers/footers; removes numbering with one range call instead of one per paragraph.
+
+### Changed
+- `word_live_get_text` (macOS) reads the whole document in one call (much faster on large or OneDrive-backed documents).
+
+Versions 1.6.7–1.6.13 and 1.6.18 were never published.
+
+## [1.6.6] - 2026-05-28
+
+### Changed
+- `word_live_apply_list` (macOS) reads paragraph texts in one batched call; JXA timeout raised to 600 s.
+
+## [1.6.5] - 2026-05-28
+
+### Fixed
+- Smart quote in the macOS `apply_list` JXA code that caused "Invalid character" errors.
+
+## [1.6.4] - 2026-05-28
+
+### Fixed
+- `font_color` was not exposed in the `word_live_apply_list` MCP schema.
+
+## [1.6.3] - 2026-05-28
+
+### Added
+- `word_live_apply_list` (macOS): multi-level lists with `level_map` text-to-level matching, `font_color` override, automatic `(a)`/`(b)` Level 3 detection and manual-prefix stripping.
+
+### Fixed
+- macOS: JXA save-as-PDF for `convert_to_pdf`, auto-truncation for large documents in `word_live_get_text`, and `word_live_get_page_text` reliability fixes.
+
+## [1.6.2] - 2026-04-29
+
+### Fixed
+- Added `Pillow` as a Windows runtime dependency for `word_screen_capture` (failed in isolated `uvx` environments).
+
+## [1.6.1] - 2026-04-29
+
+### Fixed
+- `word_screen_capture` raised `NameError: _MAC_AVAILABLE` on Windows.
+
 ## [1.6.0] - 2026-04-29
 
 ### Added
