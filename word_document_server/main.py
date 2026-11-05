@@ -966,7 +966,9 @@ def register_tools():
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Word Screen Capture",
-            readOnlyHint=True,
+            # Writes a PNG; overwrites output_path if that file exists.
+            readOnlyHint=False,
+            destructiveHint=True,
         ),
     )
     def word_screen_capture(filename: str = None, output_path: str = None):
@@ -1250,7 +1252,10 @@ def register_tools():
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Word Live Take Snapshot",
-            readOnlyHint=True,
+            # Document untouched, but replaces the server's stored snapshot.
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=True,
         ),
     )
     def word_live_take_snapshot(filename: str = None):
@@ -1260,7 +1265,9 @@ def register_tools():
     @mcp.tool(
         annotations=ToolAnnotations(
             title="Word Live Get Diff",
-            readOnlyHint=True,
+            # Document untouched, but replaces the stored snapshot after diffing.
+            readOnlyHint=False,
+            destructiveHint=False,
         ),
     )
     def word_live_get_diff(filename: str = None):
