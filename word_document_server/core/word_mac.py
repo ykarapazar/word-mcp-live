@@ -352,31 +352,40 @@ var totalPages = parseInt(app.getRangeInformation(d.textObject, {{informationTyp
 if ({page} > totalPages) throw new Error("Page {page} exceeds document (" + totalPages + " pages)");
 var ep = Math.min({ep}, totalPages);
 
+// Page starts by hopping page to page ("go to next" page, one Apple Event
+// each). A binary search on "active end page number" needed ~20 calls per
+// boundary, each forcing layout, and timed out on long documents.
+// Word binds the range "go to next" returns to the ACTIVE document, so d is
+// activated while hopping (and the previous document restored after), and
+// every hop starts from a fresh range on d.
+var pageStarts = [0, 0];
 function findPageStart(pg) {{
     if (pg <= 1) return 0;
     if (pg > totalPages) return totalEnd;
-    var lo = 0, hi = totalEnd;
-    while (lo < hi) {{
-        var mid = Math.floor((lo + hi) / 2);
-        var r = app.createRange(d, {{start: mid, end: Math.min(mid + 1, totalEnd)}});
-        var pn = parseInt(app.getRangeInformation(r, {{informationType: "active end page number"}}));
-        if (pn < pg) lo = mid + 1;
-        else hi = mid;
+    while (pageStarts.length <= pg) {{
+        var prev = pageStarts[pageStarts.length - 1];
+        var r = d.createRange({{start: prev, end: prev}});
+        pageStarts.push(app.goToNext(r, {{what: "goto a page item"}}).startOfContent());
     }}
-    return lo;
+    return pageStarts[pg];
 }}
 
 var pages = [];
-for (var pg = {page}; pg <= ep; pg++) {{
-    var pStart = findPageStart(pg);
-    var pEnd = (pg >= totalPages) ? totalEnd : findPageStart(pg + 1);
-    var pageRange = app.createRange(d, {{start: pStart, end: pEnd}});
-    pages.push({{
-        page: pg,
-        text: pageRange.content(),
-        char_start: pStart,
-        char_end: pEnd
-    }});
+{_ACTIVATE_TARGET_JS}
+try {{
+    for (var pg = {page}; pg <= ep; pg++) {{
+        var pStart = findPageStart(pg);
+        var pEnd = (pg >= totalPages) ? totalEnd : findPageStart(pg + 1);
+        var pageRange = app.createRange(d, {{start: pStart, end: pEnd}});
+        pages.push({{
+            page: pg,
+            text: pageRange.content(),
+            char_start: pStart,
+            char_end: pEnd
+        }});
+    }}
+}} finally {{
+{_RESTORE_ACTIVE_JS}
 }}
 JSON.stringify({{pages: pages, count: pages.length, page: {page}, end_page: ep, total_pages: totalPages}});
 """, timeout=60)
