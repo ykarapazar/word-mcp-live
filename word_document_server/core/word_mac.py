@@ -137,6 +137,25 @@ if (!d) {{
 """
 
 
+# app.selection belongs to the active window, not to `d`. Selection-based
+# code activates `d` first (same pattern as modify_table add_row) and
+# restores the previously active document afterwards.
+_ACTIVATE_TARGET_JS = """
+var _prevName = app.activeDocument.name();
+app.activateObject(d);
+if (app.activeDocument.name() !== d.name())
+    throw new Error("Could not activate '" + d.name() + "'");
+"""
+
+_RESTORE_ACTIVE_JS = """
+if (_prevName !== d.name()) {
+    for (var _di = 0; _di < app.documents.length; _di++) {
+        if (app.documents[_di].name() === _prevName) { try { app.activateObject(app.documents[_di]); } catch (e) {} break; }
+    }
+}
+"""
+
+
 # ── Core functions (matching word_com.py interface) ──────────────────────
 
 
@@ -364,35 +383,40 @@ def mac_find_text(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var sel = app.selection;
-sel.selectionStart = 0;
-sel.selectionEnd = 0;
-var f = sel.findObject;
-f.clearFormatting();
-f.replacement.clearFormatting();
-f.replacement.content = "";
+{_ACTIVATE_TARGET_JS}
 var results = [];
-for (var i = 0; i < {max_results}; i++) {{
-    f.content = "{escaped_search}";
-    f.forward = true;
-    f.wrap = "find stop";
-    f.matchCase = {"true" if match_case else "false"};
-    f.matchWholeWord = {"true" if whole_word else "false"};
-    f.matchWildcards = {"true" if use_wildcards else "false"};
-    if (!f.executeFind()) break;
-    var s = sel.selectionStart();
-    var e = sel.selectionEnd();
-    var ctxStart = Math.max(0, s - {context_chars});
-    var ctxEnd = Math.min(d.textObject.endOfContent(), e + {context_chars});
-    var ctxRange = d.createRange({{start: ctxStart, end: ctxEnd}});
-    results.push({{
-        text: sel.content(),
-        start: s,
-        end: e,
-        context: ctxRange.content()
-    }});
-    // Move past this match
-    sel.selectionStart = e;
+try {{
+    var sel = app.selection;
+    sel.selectionStart = 0;
+    sel.selectionEnd = 0;
+    var f = sel.findObject;
+    f.clearFormatting();
+    f.replacement.clearFormatting();
+    f.replacement.content = "";
+    for (var i = 0; i < {max_results}; i++) {{
+        f.content = "{escaped_search}";
+        f.forward = true;
+        f.wrap = "find stop";
+        f.matchCase = {"true" if match_case else "false"};
+        f.matchWholeWord = {"true" if whole_word else "false"};
+        f.matchWildcards = {"true" if use_wildcards else "false"};
+        if (!f.executeFind()) break;
+        var s = sel.selectionStart();
+        var e = sel.selectionEnd();
+        var ctxStart = Math.max(0, s - {context_chars});
+        var ctxEnd = Math.min(d.textObject.endOfContent(), e + {context_chars});
+        var ctxRange = d.createRange({{start: ctxStart, end: ctxEnd}});
+        results.push({{
+            text: sel.content(),
+            start: s,
+            end: e,
+            context: ctxRange.content()
+        }});
+        // Move past this match
+        sel.selectionStart = e;
+    }}
+}} finally {{
+{_RESTORE_ACTIVE_JS}
 }}
 JSON.stringify({{matches: results, count: results.length, searchText: "{escaped_search}"}});
 """)
@@ -509,9 +533,14 @@ def mac_insert_text(
     r.content = text;
 """
     elif position == "cursor":
-        bookmark_js = """
-    var sel = app.selection;
-    sel.content = text;
+        # The cursor of `d`, not of whichever document is in front
+        bookmark_js = _ACTIVATE_TARGET_JS + """
+    try {
+        var sel = app.selection;
+        sel.content = text;
+    } finally {
+""" + _RESTORE_ACTIVE_JS + """
+    }
 """
     else:
         # Numeric position — coerce in Python so nothing unescaped reaches JS
@@ -582,6 +611,7 @@ def mac_replace_text(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
+{_ACTIVATE_TARGET_JS}
 var prevTracking = d.trackRevisions();
 if ({"true" if track_changes else "false"}) d.trackRevisions = true;
 try {{
@@ -601,6 +631,7 @@ try {{
     var result = f.executeFind({{replace: "{replace_mode}"}});
 }} finally {{
     d.trackRevisions = prevTracking;
+{_RESTORE_ACTIVE_JS}
 }}
 JSON.stringify({{replaced: result, find: "{escaped_find}", replaceWith: "{escaped_replace}"}});
 """)
@@ -769,20 +800,33 @@ var r = p.textObject;
     else:
         return json.dumps({"error": "Must provide start/end or paragraph_index"})
 
+    # Resolve the target document by name (same matching as every other tool)
+    doc_name = json.loads(_run_jxa(f"""
+var app = Application("Microsoft Word");
+{finder}
+JSON.stringify(d.name());
+"""))
+
     # JXA's make() doesn't work for Word comments — use AppleScript
     escaped_as_text = _escape_as(text)
     if start is not None and end is not None:
-        range_as = f"set r to create range active document start {start} end {end}"
+        range_as = f"set r to create range d start {start} end {end}"
     elif paragraph_index is not None:
-        range_as = f"set r to text object of paragraph {paragraph_index + 1} of active document"
+        range_as = f"set r to text object of paragraph {paragraph_index + 1} of d"
     else:
         return json.dumps({"error": "Must provide start/end or paragraph_index"})
 
+    # Word for Mac ignores "user name" for new comments (it uses the signed-in
+    # identity), so set the author on the created comment instead.
+    author_as = f'set author of c to "{_escape_as(author)}"' if author else ""
+
     result = _run_applescript(f'''
 tell application "Microsoft Word"
+    set d to document "{_escape_as(doc_name)}"
     {range_as}
-    make new Word comment at active document with properties {{comment text:"{escaped_as_text}", scope:r}}
-    return count of Word comments of active document
+    set c to make new Word comment at d with properties {{comment text:"{escaped_as_text}", scope:r}}
+    {author_as}
+    return count of Word comments of d
 end tell
 ''')
     return json.dumps({"added": True, "commentCount": int(result)})
