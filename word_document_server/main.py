@@ -897,7 +897,7 @@ def register_tools():
         Optionally filter by author or specific change IDs."""
         return tracked_changes_tools.reject_tracked_changes(filename, author, change_ids)
 
-    # --- Live editing tools (Windows only, requires Word running) ---
+    # --- Live editing tools (Windows or macOS, requires Word running) ---
 
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -906,7 +906,7 @@ def register_tools():
         ),
     )
     def word_screen_capture(filename: str = None, output_path: str = None):
-        """[Windows only] Capture a screenshot of a Word document window.
+        """[Requires Word open — Windows or macOS] Capture a screenshot of a Word document window.
         Returns the path to the saved PNG image. Requires Word to be running."""
         return screen_capture_tools.word_screen_capture(filename, output_path)
 
@@ -923,7 +923,7 @@ def register_tools():
         bookmark: str = None,
         track_changes: bool = False,
     ):
-        """[Windows only] Insert text into a Word document that is open in Word.
+        """[Requires Word open — Windows or macOS] Insert text into a Word document that is open in Word.
         Position: 'start', 'end', 'cursor', or character offset. Requires Word running."""
         return live_tools.word_live_insert_text(
             filename, text, position, bookmark, track_changes
@@ -1023,7 +1023,7 @@ def register_tools():
         autofit: str = "window",
         track_changes: bool = False,
     ):
-        """[Windows only] Add a table to a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Add a table to a Word document open in Word.
         Optionally provide data as 2D list. Default style is 'Table Grid' with
         autofit to window width. Set style=None for no style, autofit=None for
         legacy fixed behavior. Requires Word running."""
@@ -1099,7 +1099,7 @@ def register_tools():
         end: int = None,
         track_changes: bool = False,
     ):
-        """[Windows only] Delete text from a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Delete text from a Word document open in Word.
         Specify start/end character positions. Requires Word running."""
         return live_tools.word_live_delete_text(
             filename, start, end, track_changes
@@ -1171,7 +1171,7 @@ def register_tools():
             line_spacing,
         )
 
-    # --- Live read tools (Windows only, requires Word running) ---
+    # --- Live read tools (Windows or macOS, requires Word running) ---
 
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -1180,7 +1180,7 @@ def register_tools():
         ),
     )
     def word_live_get_text(filename: str = None):
-        """[Windows only] Get all text from a Word document open in Word, paragraph by paragraph. For large documents (200+ paragraphs), automatically returns only the first 3 pages — use word_live_get_page_text to read specific pages."""
+        """[Requires Word open — Windows or macOS] Get all text from a Word document open in Word, paragraph by paragraph. For large documents (200+ paragraphs), automatically returns only the first 3 pages — use word_live_get_page_text to read specific pages."""
         return live_read_tools.word_live_get_text(filename)
 
     @mcp.tool(
@@ -1190,7 +1190,7 @@ def register_tools():
         ),
     )
     def word_live_take_snapshot(filename: str = None):
-        """[Windows only] Store a snapshot of the current document text for later diffing without returning the full text. Use word_live_get_diff afterwards to see what changed."""
+        """[Requires Word open — Windows or macOS] Store a snapshot of the current document text for later diffing without returning the full text. Use word_live_get_diff afterwards to see what changed."""
         return live_read_tools.word_live_take_snapshot(filename)
 
     @mcp.tool(
@@ -1237,7 +1237,7 @@ def register_tools():
         ),
     )
     def word_live_get_info(filename: str = None):
-        """[Windows only] Get document info (pages, words, sections, etc.) from a Word document open in Word. Requires Word running."""
+        """[Requires Word open — Windows or macOS] Get document info (pages, words, sections, etc.) from a Word document open in Word. Requires Word running."""
         return live_read_tools.word_live_get_info(filename)
 
     @mcp.tool(
@@ -1279,7 +1279,7 @@ def register_tools():
         ),
     )
     def word_live_list_open():
-        """[Windows only] List all documents currently open in Word with name, path, pages, and saved status."""
+        """[Requires Word open — Windows or macOS] List all documents currently open in Word with name, path, pages, and saved status."""
         return live_read_tools.word_live_list_open()
 
     @mcp.tool(
@@ -1297,7 +1297,7 @@ def register_tools():
         context_chars: int = 60,
         max_results: int = 50,
     ):
-        """[Windows only] Find text in a Word document open in Word. Returns positions and context.
+        """[Requires Word open — Windows or macOS] Find text in a Word document open in Word. Returns positions and context.
         With use_wildcards=True, supports ^m (page break), ^t (tab), ^p (paragraph mark) and Word wildcards.
         context_chars controls how many characters of surrounding context to return (default 60). Requires Word running."""
         return live_read_tools.word_live_find_text(
@@ -1312,7 +1312,7 @@ def register_tools():
         ),
     )
     def word_live_get_comments(filename: str = None):
-        """[Windows only] Get all comments from a Word document open in Word. Requires Word running."""
+        """[Requires Word open — Windows or macOS] Get all comments from a Word document open in Word. Requires Word running."""
         return live_read_tools.word_live_get_comments(filename)
 
     @mcp.tool(
@@ -1329,7 +1329,7 @@ def register_tools():
         text: str = "",
         author: str = DEFAULT_AUTHOR,
     ):
-        """[Windows only] Add a comment to a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Add a comment to a Word document open in Word.
         Specify start/end character positions or paragraph_index (1-indexed). Requires Word running."""
         return live_read_tools.word_live_add_comment(
             filename, start, end, paragraph_index, text, author
@@ -1382,7 +1382,7 @@ def register_tools():
         filename: str = None,
         comment_index: int = None,
     ):
-        """[Windows only] Delete a comment from a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Delete a comment from a Word document open in Word.
         Permanently removes the comment. Use word_live_get_comments to find comment_index.
         Requires Word running."""
         return live_read_tools.word_live_delete_comment(
@@ -1396,7 +1396,7 @@ def register_tools():
         ),
     )
     def word_live_list_revisions(filename: str = None):
-        """[Windows only] List all tracked changes (revisions) in a Word document open in Word. Requires Word running."""
+        """[Requires Word open — Windows or macOS] List all tracked changes (revisions) in a Word document open in Word. Requires Word running."""
         return live_read_tools.word_live_list_revisions(filename)
 
     @mcp.tool(
@@ -1410,7 +1410,7 @@ def register_tools():
         author: str = None,
         revision_ids: list[int] = None,
     ):
-        """[Windows only] Accept tracked changes in a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Accept tracked changes in a Word document open in Word.
         Filter by author or specific revision IDs. Requires Word running."""
         return live_read_tools.word_live_accept_revisions(
             filename, author, revision_ids
@@ -1427,7 +1427,7 @@ def register_tools():
         author: str = None,
         revision_ids: list[int] = None,
     ):
-        """[Windows only] Reject tracked changes in a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Reject tracked changes in a Word document open in Word.
         Filter by author or specific revision IDs. Requires Word running."""
         return live_read_tools.word_live_reject_revisions(
             filename, author, revision_ids
@@ -1470,7 +1470,7 @@ def register_tools():
         filename: str = None,
         times: int = 1,
     ):
-        """[Windows only] Undo the last N operations in a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Undo the last N operations in a Word document open in Word.
         Each MCP tool call is one undo entry. Requires Word running."""
         return live_tools.word_live_undo(filename, times)
 
@@ -1484,7 +1484,7 @@ def register_tools():
         filename: str = None,
         save_as: str = None,
     ):
-        """[Windows only] Save a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Save a Word document open in Word.
         Optionally save to a new path with save_as. Requires Word running."""
         return live_tools.word_live_save(filename, save_as)
 
@@ -1498,7 +1498,7 @@ def register_tools():
         filename: str = None,
         enable: bool = None,
     ):
-        """[Windows only] Toggle or set Track Changes mode on a Word document.
+        """[Requires Word open — Windows or macOS] Toggle or set Track Changes mode on a Word document.
         If enable is omitted, toggles current state. Requires Word running."""
         return live_tools.word_live_toggle_track_changes(filename, enable)
 
@@ -1606,7 +1606,7 @@ def register_tools():
     def word_live_diagnose_layout(filename: str = None):
         return live_read_tools.word_live_diagnose_layout(filename)
 
-    # --- Live layout tools (Windows only, requires Word running) ---
+    # --- Live layout tools (Windows or macOS, requires Word running) ---
 
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -1625,7 +1625,7 @@ def register_tools():
         margin_left_inches: float = None,
         margin_right_inches: float = None,
     ):
-        """[Windows only] Set page layout (orientation, size, margins) for a section in a Word document open in Word. Requires Word running."""
+        """[Requires Word open — Windows or macOS] Set page layout (orientation, size, margins) for a section in a Word document open in Word. Requires Word running."""
         return live_layout_tools.word_live_set_page_layout(
             filename, section_index, orientation,
             page_width_inches, page_height_inches,
@@ -1647,7 +1647,7 @@ def register_tools():
         header_alignment: str = "center",
         footer_alignment: str = "center",
     ):
-        """[Windows only] Add header and/or footer to a section in a Word document open in Word. Requires Word running."""
+        """[Requires Word open — Windows or macOS] Add header and/or footer to a section in a Word document open in Word. Requires Word running."""
         return live_layout_tools.word_live_add_header_footer(
             filename, section_index, header_text, footer_text,
             header_alignment, footer_alignment,
@@ -1668,7 +1668,7 @@ def register_tools():
         suffix: str = "",
         include_total: bool = False,
     ):
-        """[Windows only] Add page numbers to header or footer in a Word document open in Word. Requires Word running."""
+        """[Requires Word open — Windows or macOS] Add page numbers to header or footer in a Word document open in Word. Requires Word running."""
         return live_layout_tools.word_live_add_page_numbers(
             filename, section_index, position, alignment,
             prefix, suffix, include_total,
@@ -1684,7 +1684,7 @@ def register_tools():
         filename: str = None,
         break_type: str = "new_page",
     ):
-        """[Windows only] Add a section break (new_page, continuous, even_page, odd_page) to a Word document open in Word. Requires Word running."""
+        """[Requires Word open — Windows or macOS] Add a section break (new_page, continuous, even_page, odd_page) to a Word document open in Word. Requires Word running."""
         return live_layout_tools.word_live_add_section_break(
             filename, break_type,
         )
@@ -1708,7 +1708,7 @@ def register_tools():
         keep_together: bool = None,
         alignment: str = None,
     ):
-        """[Windows only] Set paragraph spacing and layout properties in a Word document open in Word. Paragraphs are 1-indexed. Requires Word running."""
+        """[Requires Word open — Windows or macOS] Set paragraph spacing and layout properties in a Word document open in Word. Paragraphs are 1-indexed. Requires Word running."""
         return live_layout_tools.word_live_set_paragraph_spacing(
             filename, paragraph_index, start_paragraph, end_paragraph,
             space_before_pt, space_after_pt, line_spacing, line_spacing_rule,
@@ -1726,7 +1726,7 @@ def register_tools():
         paragraph_index: int = 1,
         bookmark_name: str = "",
     ):
-        """[Windows only] Add a named bookmark at a paragraph in a Word document open in Word.
+        """[Requires Word open — Windows or macOS] Add a named bookmark at a paragraph in a Word document open in Word.
         Paragraph is 1-indexed. Requires Word running."""
         return live_layout_tools.word_live_add_bookmark(
             filename, paragraph_index, bookmark_name,

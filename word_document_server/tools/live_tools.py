@@ -153,7 +153,7 @@ async def word_live_format_text(
     preserve_direct_formatting: bool = False,
     track_changes: bool = False,
 ) -> str:
-    """[Windows only] Format text in an open Word document: font, color, highlight, style, alignment, page breaks.
+    """[Requires Word open — Windows or macOS] Format text in an open Word document: font, color, highlight, style, alignment, page breaks.
     Use this tool for any visual/formatting change that does NOT alter the text content itself.
 
     Two addressing modes (provide one):
@@ -345,7 +345,7 @@ async def word_live_apply_list(
     font_color: str = None,
     outline_numbered: bool = True,
 ) -> str:
-    """[Windows only] Apply or remove bullet/numbered/multilevel list formatting on paragraphs.
+    """[Requires Word open — Windows or macOS] Apply or remove bullet/numbered/multilevel list formatting on paragraphs.
 
     Args:
         filename: Document name or path (None = active document).
@@ -534,7 +534,7 @@ async def word_live_setup_heading_numbering(
     h2_space_after: float = None,
     line_spacing: float = None,
 ) -> str:
-    r"""[Windows only] Set up auto-numbered headings with multilevel list (1. / 1.1).
+    r"""[Requires Word open — Windows or macOS] Set up auto-numbered headings with multilevel list (1. / 1.1).
 
     Creates a multilevel list template linked to Heading 1 and Heading 2 styles.
     Default formats: Level 1 = "%1." (produces "1."), Level 2 = "%1.%2" (produces "1.1").
@@ -923,7 +923,7 @@ async def word_live_replace_text(
     replace_all: bool = True,
     track_changes: bool = False,
 ) -> str:
-    """[Windows only] Find and replace text in an open Word document.
+    """[Requires Word open — Windows or macOS] Find and replace text in an open Word document.
 
     Uses Word's native Find & Replace, which works across tracked change boundaries
     (unlike manual delete+insert). Supports Word special characters when use_wildcards=True:
@@ -1335,7 +1335,7 @@ async def word_live_format_table(
     cell_shading: list = None,
     autofit: str = None,
 ) -> str:
-    """Format a table in an open Word document via COM.
+    """[Windows only] Format a table in an open Word document via COM.
 
     Supports border removal, cell formatting, column sizing, and table alignment.
     Use table_index=-1 for the last table, 1 for the first, etc.
@@ -1602,7 +1602,7 @@ async def word_live_modify_table(
     track_changes: bool = False,
     scrub_orphans: bool = True,
 ) -> str:
-    """[Windows only] Modify a table in an open Word document.
+    """[Requires Word open — Windows or macOS] Modify a table in an open Word document.
 
     Operations: get_info, set_cell, set_row, set_range, add_column, delete_column,
     add_row, delete_row, merge_cells, autofit, delete_table.
@@ -1762,7 +1762,7 @@ async def word_live_undo(
     filename: str = None,
     times: int = 1,
 ) -> str:
-    """[Windows only] Undo the last N operations in an open Word document.
+    """[Requires Word open — Windows or macOS] Undo the last N operations in an open Word document.
 
     Each MCP destructive tool call is grouped as a single undo entry (e.g.,
     "MCP: Insert Text"). Calling undo(times=1) reverts the last MCP operation;
@@ -1924,7 +1924,7 @@ async def word_live_insert_image(
     border_color: str = None,
     link_to_file: bool = False,
 ) -> str:
-    """Insert an image into an open Word document.
+    """[Windows only] Insert an image into an open Word document.
 
     The image can be placed at a specific paragraph, at the start or end,
     or at a character offset position.
@@ -2155,7 +2155,7 @@ async def word_live_insert_cross_reference(
     paragraph_index: int = None,
     insert_as_hyperlink: bool = True,
 ) -> str:
-    """Insert a cross-reference to a heading, bookmark, figure, or table.
+    """[Windows only] Insert a cross-reference to a heading, bookmark, figure, or table.
 
     Cross-references are live fields that update automatically (e.g., "see Section 2.1").
 
@@ -2267,7 +2267,7 @@ async def word_live_list_cross_reference_items(
     filename: str = None,
     ref_type: str = "heading",
 ) -> str:
-    """List all available cross-reference targets of a given type.
+    """[Windows only] List all available cross-reference targets of a given type.
 
     Use this to discover which headings, bookmarks, figures, etc. can be
     referenced, and their 1-based index for use with word_live_insert_cross_reference.
@@ -2379,7 +2379,7 @@ async def word_live_insert_equation(
     position: str = "end",
     display_mode: bool = False,
 ) -> str:
-    """Insert a mathematical equation into a Word document using UnicodeMath syntax.
+    """[Windows only] Insert a mathematical equation into a Word document using UnicodeMath syntax.
 
     LaTeX-like commands (e.g. \\int, \\sum, \\alpha) are automatically converted to
     Unicode math symbols before insertion, ensuring proper rendering.

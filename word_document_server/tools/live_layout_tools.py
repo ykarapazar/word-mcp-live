@@ -504,7 +504,7 @@ async def word_live_add_watermark(
     rotation: int = -45,
     section_index: int = 1,
 ) -> str:
-    """Add a diagonal text watermark to an open Word document.
+    """[Windows only] Add a diagonal text watermark to an open Word document.
 
     Args:
         filename: Document name or path (None = active document).

@@ -56,7 +56,7 @@ def _get_snapshot(doc) -> dict | None:
 
 
 async def word_live_take_snapshot(filename: str = None) -> str:
-    """[Windows only] Store a snapshot of the current document text for later diffing.
+    """[Requires Word open — Windows or macOS] Store a snapshot of the current document text for later diffing.
 
     Call this to set a baseline without returning the full text.
     Subsequent calls to word_live_get_diff will compare against this snapshot.
@@ -320,7 +320,7 @@ async def word_live_get_paragraph_format(
     end_paragraph: int = None,
     include_runs: bool = False,
 ) -> str:
-    """[Windows only] Inspect paragraph formatting properties for diagnostics.
+    """[Requires Word open — Windows or macOS] Inspect paragraph formatting properties for diagnostics.
 
     Returns detailed formatting info for each paragraph in the range. Essential for
     debugging layout issues like unexpected page breaks (caused by keep_with_next chains),
@@ -796,7 +796,7 @@ async def word_live_reply_to_comment(
     text: str = "",
     author: str = DEFAULT_AUTHOR,
 ) -> str:
-    """Reply to an existing comment in an open Word document.
+    """[Windows only] Reply to an existing comment in an open Word document.
 
     Adds a threaded reply to a top-level comment. Requires Word 2016 or later.
     Use word_live_get_comments to find the comment_index.
@@ -864,7 +864,7 @@ async def word_live_resolve_comment(
     comment_index: int = None,
     resolve: bool = True,
 ) -> str:
-    """Resolve or unresolve a comment in an open Word document.
+    """[Windows only] Resolve or unresolve a comment in an open Word document.
 
     Marks a comment thread as resolved (Done) or re-opens it.
     Requires Word 2016 or later.
@@ -1194,7 +1194,7 @@ async def word_live_get_page_text(
     page: int = 1,
     end_page: int = None,
 ) -> str:
-    """[Windows only] Get text from specific page(s) of an open Word document.
+    """[Requires Word open — Windows or macOS] Get text from specific page(s) of an open Word document.
 
     Returns paragraphs on the requested page(s) with char_start/char_end offsets
     that can be passed directly to word_live_format_text, word_live_delete_text, etc.
@@ -1353,7 +1353,7 @@ async def word_live_get_undo_history(
 async def word_live_diagnose_layout(
     filename: str = None,
 ) -> str:
-    """[Windows only] Scan an open Word document for common layout problems.
+    """[Requires Word open — Windows or macOS] Scan an open Word document for common layout problems.
 
     Performs a single-pass scan of all paragraphs and reports issues that cause
     unexpected layout behavior (empty pages, content pushed to wrong page, etc.).
@@ -1596,7 +1596,7 @@ async def word_live_set_core_properties(
 
 
 async def word_live_list_open() -> str:
-    """[Windows only] List all documents currently open in Microsoft Word.
+    """[Requires Word open — Windows or macOS] List all documents currently open in Microsoft Word.
 
     Returns JSON with list of open documents including name, full_path,
     pages, saved status, and whether it is the active document.
