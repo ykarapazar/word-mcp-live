@@ -70,7 +70,7 @@ async def word_live_insert_text(
         # MCP/JSON sends backslash-r as 2 chars; Word COM needs chr(13) for paragraph marks.
         text = text.replace("\\r\\n", "\r").replace("\\r", "\r").replace("\\n", "\r")
 
-        with undo_record(app, "MCP: Insert Text"):
+        with undo_record(app, "MCP: Insert Text", doc):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
             if track_changes:
@@ -225,7 +225,7 @@ async def word_live_format_text(
                 {"error": "Provide start/end character positions OR start_paragraph/end_paragraph"}
             )
 
-        with undo_record(app, "MCP: Format Text"):
+        with undo_record(app, "MCP: Format Text", doc):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
             if track_changes:
@@ -415,7 +415,7 @@ async def word_live_apply_list(
                 "error": f"Paragraph range {start_paragraph}-{end_paragraph} out of bounds (doc has {total_paras} paragraphs)"
             })
 
-        with undo_record(app, "MCP: Apply List"):
+        with undo_record(app, "MCP: Apply List", doc):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
             if track_changes:
@@ -623,7 +623,7 @@ async def word_live_setup_heading_numbering(
             )
             return rng if rng.Find.Found else None
 
-        with undo_record(app, "MCP: Setup Heading Numbering"):
+        with undo_record(app, "MCP: Setup Heading Numbering", doc):
             # --- Optionally customize heading styles ---
             has_style_params = any(p is not None for p in [
                 font_name, h1_size, h2_size, bold, alignment, font_color,
@@ -986,7 +986,7 @@ async def word_live_replace_text(
         app = get_word_app()
         doc = find_document(app, filename)
 
-        with undo_record(app, "MCP: Replace Text"):
+        with undo_record(app, "MCP: Replace Text", doc):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
             if track_changes:
@@ -1122,7 +1122,7 @@ async def word_live_insert_paragraphs(
 
         resolved_style = style if style else "Normal"
 
-        with undo_record(app, "MCP: Insert Paragraphs"):
+        with undo_record(app, "MCP: Insert Paragraphs", doc):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
             if track_changes:
@@ -1265,7 +1265,7 @@ async def word_live_add_table(
 
             rng = doc.Range(offset, offset)
 
-        with undo_record(app, "MCP: Add Table"):
+        with undo_record(app, "MCP: Add Table", doc):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
             if track_changes:
@@ -1393,7 +1393,7 @@ async def word_live_format_table(
 
         BORDER_IDS = [-1, -2, -3, -4, -5, -6, -7, -8]  # top, left, bottom, right, horiz, vert, etc.
 
-        with undo_record(app, "MCP: Format Table"):
+        with undo_record(app, "MCP: Format Table", doc):
             # --- Borders ---
             if border_style is not None:
                 style_val = BORDER_STYLES.get(border_style.lower())
@@ -1540,7 +1540,7 @@ async def word_live_delete_text(
         rng = doc.Range(start, end)
         deleted_text = rng.Text
 
-        with undo_record(app, "MCP: Delete Text"):
+        with undo_record(app, "MCP: Delete Text", doc):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
             if track_changes:
@@ -1681,7 +1681,7 @@ async def word_live_modify_table(
             return json.dumps(result, ensure_ascii=False)
 
         # All other operations are destructive
-        with undo_record(app, "MCP: Modify Table"):
+        with undo_record(app, "MCP: Modify Table", doc):
             prev_tracking = doc.TrackRevisions
             prev_author = app.UserName
             if track_changes:
@@ -2029,7 +2029,7 @@ async def word_live_insert_image(
         # Alignment map
         ALIGN_MAP = {"left": 0, "center": 1, "right": 2}
 
-        with undo_record(app, "MCP: Insert Image"):
+        with undo_record(app, "MCP: Insert Image", doc):
             inline_shape = rng.InlineShapes.AddPicture(
                 FileName=abs_path,
                 LinkToFile=link_to_file,
@@ -2241,7 +2241,7 @@ async def word_live_insert_cross_reference(
 
         rng.Select()
 
-        with undo_record(app, "MCP: Insert Cross Reference"):
+        with undo_record(app, "MCP: Insert Cross Reference", doc):
             app.Selection.InsertCrossReference(
                 ReferenceType=ref_type_map[ref_type_lower],
                 ReferenceKind=ref_kind_map[ref_kind_lower],
@@ -2488,7 +2488,7 @@ async def word_live_insert_equation(
         if not equation or not equation.strip():
             return json.dumps({"error": "equation text is required"})
 
-        with undo_record(app, "MCP: Insert Equation"):
+        with undo_record(app, "MCP: Insert Equation", doc):
             # Determine insertion range
             if paragraph_index is not None:
                 if paragraph_index < 1 or paragraph_index > doc.Paragraphs.Count:

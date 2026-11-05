@@ -69,7 +69,7 @@ async def word_live_set_page_layout(
                 "error": f"Section {section_index} out of range (1-{doc.Sections.Count})"
             })
 
-        with undo_record(app, "MCP: Set Page Layout"):
+        with undo_record(app, "MCP: Set Page Layout", doc):
             ps = doc.Sections(section_index).PageSetup
             changes = []
 
@@ -151,7 +151,7 @@ async def word_live_add_header_footer(
                 "error": f"Section {section_index} out of range (1-{doc.Sections.Count})"
             })
 
-        with undo_record(app, "MCP: Add Header/Footer"):
+        with undo_record(app, "MCP: Add Header/Footer", doc):
             # Alignment map: 0=left, 1=center, 2=right
             align_map = {"left": 0, "center": 1, "right": 2}
             added = []
@@ -227,7 +227,7 @@ async def word_live_add_page_numbers(
                 "error": f"Section {section_index} out of range (1-{doc.Sections.Count})"
             })
 
-        with undo_record(app, "MCP: Add Page Numbers"):
+        with undo_record(app, "MCP: Add Page Numbers", doc):
             # PageNumberAlignment: 0=left, 1=center, 2=right
             align_map = {"left": 0, "center": 1, "right": 2}
             pn_alignment = align_map.get(alignment.lower(), 1)
@@ -324,7 +324,7 @@ async def word_live_add_section_break(
                 "error": f"Invalid break_type: {break_type}. Use: {list(type_map.keys())}"
             })
 
-        with undo_record(app, "MCP: Add Section Break"):
+        with undo_record(app, "MCP: Add Section Break", doc):
             # Insert at end of document
             end_pos = doc.Content.End - 1
             rng = doc.Range(end_pos, end_pos)
@@ -413,7 +413,7 @@ async def word_live_set_paragraph_spacing(
         else:
             indices = range(1, total + 1)
 
-        with undo_record(app, "MCP: Set Paragraph Spacing"):
+        with undo_record(app, "MCP: Set Paragraph Spacing", doc):
             count = 0
             for i in indices:
                 pf = doc.Paragraphs(i).Format
@@ -481,7 +481,7 @@ async def word_live_add_bookmark(
                 "error": f"paragraph_index {paragraph_index} out of range (1-{doc.Paragraphs.Count})"
             })
 
-        with undo_record(app, "MCP: Add Bookmark"):
+        with undo_record(app, "MCP: Add Bookmark", doc):
             rng = doc.Paragraphs(paragraph_index).Range
             doc.Bookmarks.Add(bookmark_name, rng)
 
@@ -534,7 +534,7 @@ async def word_live_add_watermark(
                 "error": f"Section {section_index} out of range (1-{doc.Sections.Count})"
             })
 
-        with undo_record(app, "MCP: Add Watermark"):
+        with undo_record(app, "MCP: Add Watermark", doc):
             section = doc.Sections(section_index)
             header = section.Headers(1)  # wdHeaderFooterPrimary
 

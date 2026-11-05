@@ -149,7 +149,7 @@ def find_document(app, filename: str = None):
 
 
 @contextmanager
-def undo_record(app, name: str):
+def undo_record(app, name: str, doc=None):
     """Wrap a block of COM mutations in a single Word UndoRecord.
 
     Groups all changes into one Ctrl+Z entry in Word's undo stack.
@@ -165,6 +165,17 @@ def undo_record(app, name: str):
         with undo_record(app, "MCP: Insert Text"):
             doc.Range(0, 0).InsertBefore("Hello")
     """
+    # UndoRecord groups edits only on the ActiveDocument's undo stack; when the
+    # target doc is not active, each COM edit lands as its own undo entry.
+    prev = None
+    if doc is not None:
+        try:
+            active = app.ActiveDocument
+            if active.FullName != doc.FullName:
+                prev = active
+                doc.Activate()
+        except Exception:
+            prev = None
     rec = None
     try:
         rec = app.UndoRecord
@@ -183,5 +194,10 @@ def undo_record(app, name: str):
         if rec is not None:
             try:
                 rec.EndCustomRecord()
+            except Exception:
+                pass
+        if prev is not None:
+            try:
+                prev.Activate()
             except Exception:
                 pass

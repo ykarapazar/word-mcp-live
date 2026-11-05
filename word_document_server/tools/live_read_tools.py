@@ -790,7 +790,7 @@ async def word_live_add_comment(
                 "error": "Provide either start/end positions or paragraph_index"
             })
 
-        with undo_record(app, "MCP: Add Comment"):
+        with undo_record(app, "MCP: Add Comment", doc):
             # Save and restore author
             prev_author = app.UserName
             app.UserName = author
@@ -855,7 +855,7 @@ async def word_live_reply_to_comment(
 
         comment = doc.Comments(comment_index)
 
-        with undo_record(app, "MCP: Reply to Comment"):
+        with undo_record(app, "MCP: Reply to Comment", doc):
             prev_author = app.UserName
             app.UserName = author
             try:
@@ -985,7 +985,7 @@ async def word_live_delete_comment(
         comment = doc.Comments(comment_index)
         comment_text = str(comment.Range.Text)[:100] if comment.Range else ""
 
-        with undo_record(app, "MCP: Delete Comment"):
+        with undo_record(app, "MCP: Delete Comment", doc):
             comment.Delete()
 
         return json.dumps({
@@ -1097,7 +1097,7 @@ async def word_live_accept_revisions(
         app = get_word_app()
         doc = find_document(app, filename)
 
-        with undo_record(app, "MCP: Accept Revisions"):
+        with undo_record(app, "MCP: Accept Revisions", doc):
             if revision_ids is not None:
                 # Accept specific revisions (process in reverse to preserve indices)
                 accepted = 0
@@ -1169,7 +1169,7 @@ async def word_live_reject_revisions(
         app = get_word_app()
         doc = find_document(app, filename)
 
-        with undo_record(app, "MCP: Reject Revisions"):
+        with undo_record(app, "MCP: Reject Revisions", doc):
             if revision_ids is not None:
                 rejected = 0
                 for rid in sorted(revision_ids, reverse=True):
@@ -1595,7 +1595,7 @@ async def word_live_set_core_properties(
         changes: dict = {}
         errors: dict = {}
 
-        with undo_record(app, "MCP: Set Core Properties"):
+        with undo_record(app, "MCP: Set Core Properties", doc):
             props = doc.BuiltInDocumentProperties
             for key, value in inputs.items():
                 if value is None:
