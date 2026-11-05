@@ -1112,8 +1112,7 @@ async def word_live_insert_paragraphs(
                 })
             target_para = doc.Paragraphs(com_index)
         else:
-            for i in range(1, total_paras + 1):
-                para = doc.Paragraphs(i)
+            for para in doc.Paragraphs:
                 para_text = para.Range.Text.rstrip("\r\x07")
                 if target_text in para_text:
                     target_para = para
@@ -2303,8 +2302,7 @@ async def word_live_list_cross_reference_items(
 
         if ref_type_lower == "heading":
             idx = 1
-            for i in range(1, doc.Paragraphs.Count + 1):
-                p = doc.Paragraphs(i)
+            for i, p in enumerate(doc.Paragraphs, 1):
                 style_name = p.Style.NameLocal
                 if style_name.startswith("Heading"):
                     text = p.Range.Text.strip()
@@ -2349,8 +2347,7 @@ async def word_live_list_cross_reference_items(
             # Scan for captioned items (SEQ fields)
             seq_label = {"figure": "Figure", "table": "Table", "equation": "Equation"}[ref_type_lower]
             idx = 1
-            for i in range(1, doc.Paragraphs.Count + 1):
-                p = doc.Paragraphs(i)
+            for i, p in enumerate(doc.Paragraphs, 1):
                 text = p.Range.Text.strip()
                 if text.startswith(seq_label):
                     result.append({

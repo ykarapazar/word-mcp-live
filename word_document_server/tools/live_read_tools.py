@@ -6,6 +6,7 @@ that python-docx cannot open.
 """
 
 import json
+import re
 import sys
 import time
 from difflib import SequenceMatcher
@@ -28,13 +29,34 @@ def _doc_key(doc) -> str:
     return doc.Name.lower()
 
 
+# A paragraph ends at "\r"; a table-cell / end-of-row paragraph ends at "\r\x07".
+_PARA_END = re.compile("\r\x07?")
+
+
+def _bulk_paragraph_texts(doc):
+    """Read every paragraph's text with one COM call per section.
+
+    Doc.Paragraphs(i) walks the collection from the start on every call, so a
+    per-index loop is O(n^2) in COM round-trips. Splitting each section's text
+    on paragraph marks gives the same strings. Returns None if the split does
+    not line up with Paragraphs.Count, so callers can fall back.
+    """
+    texts = []
+    for sec in doc.Sections:
+        parts = _PARA_END.split(sec.Range.Text)
+        if parts and parts[-1] == "":
+            parts.pop()
+        texts.extend(parts)
+    return texts if len(texts) == doc.Paragraphs.Count else None
+
+
 def _read_paragraphs(doc) -> list[dict]:
     """Read all paragraphs from *doc* and return as a list of dicts."""
-    paras = []
-    for i in range(1, doc.Paragraphs.Count + 1):
-        text = doc.Paragraphs(i).Range.Text.rstrip("\r\x07")
-        paras.append({"index": i, "text": text})
-    return paras
+    texts = _bulk_paragraph_texts(doc)
+    if texts is None:
+        # Enumerator is O(n); doc.Paragraphs(i) is O(i) per call.
+        texts = [p.Range.Text for p in doc.Paragraphs]
+    return [{"index": i, "text": t.rstrip("\r\x07")} for i, t in enumerate(texts, 1)]
 
 
 def _store_snapshot(doc, paragraphs: list[dict]) -> None:
@@ -298,10 +320,7 @@ async def word_live_get_text(filename: str = None) -> str:
             )
             return json.dumps(result, ensure_ascii=False)
 
-        paragraphs = []
-        for i in range(1, total_paras + 1):
-            text = doc.Paragraphs(i).Range.Text.rstrip("\r\x07")
-            paragraphs.append({"index": i, "text": text})
+        paragraphs = _read_paragraphs(doc)
 
         return json.dumps({
             "success": True,
@@ -377,8 +396,10 @@ async def word_live_get_paragraph_format(
         }
 
         results = []
-        for i in range(start_paragraph, end_paragraph + 1):
-            para = doc.Paragraphs(i)
+        # One span instead of doc.Paragraphs(i) per index (each is O(i) in Word).
+        span = doc.Range(doc.Paragraphs(start_paragraph).Range.Start,
+                         doc.Paragraphs(end_paragraph).Range.End)
+        for i, para in enumerate(span.Paragraphs, start_paragraph):
             rng = para.Range
             fmt = para.Format
             text = rng.Text.rstrip("\r\x07")
@@ -1257,8 +1278,7 @@ async def word_live_get_page_text(
 
         # Collect paragraphs within the page range
         paragraphs = []
-        for i in range(1, doc.Paragraphs.Count + 1):
-            para = doc.Paragraphs(i)
+        for i, para in enumerate(doc.Paragraphs, 1):
             p_start = para.Range.Start
             p_end = para.Range.End
 
@@ -1393,8 +1413,7 @@ async def word_live_diagnose_layout(
         kwn_chain_start = None
         kwn_chain_len = 0
 
-        for i in range(1, total_paras + 1):
-            para = doc.Paragraphs(i)
+        for i, para in enumerate(doc.Paragraphs, 1):
             fmt = para.Format
             rng = para.Range
             text = rng.Text.rstrip("\r\x07")
