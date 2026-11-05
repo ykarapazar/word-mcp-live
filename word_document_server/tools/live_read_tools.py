@@ -1277,8 +1277,17 @@ async def word_live_get_page_text(
             range_end = doc.Content.End
 
         # Collect paragraphs within the page range
+        # Walk only the paragraphs overlapping the page range; find the
+        # 1-based index of the first one without iterating from the top.
+        span_paras = doc.Range(range_start, range_end).Paragraphs
+        first_start = span_paras(1).Range.Start
+        before = doc.Range(0, first_start).Paragraphs
+        first_index = before.Count + 1
+        if before.Last.Range.Start == first_start:  # range touched paragraph itself
+            first_index -= 1
+
         paragraphs = []
-        for i, para in enumerate(doc.Paragraphs, 1):
+        for i, para in enumerate(span_paras, first_index):
             p_start = para.Range.Start
             p_end = para.Range.End
 
