@@ -15,6 +15,13 @@ import unicodedata
 from contextlib import contextmanager
 
 
+_TIMEOUT_MSG = (
+    "Microsoft Word did not respond within {timeout} s. Word may be showing a dialog "
+    "(close it and retry) or still be busy with a previous request, which it keeps "
+    "processing after a timeout."
+)
+
+
 def _run_jxa(script: str, timeout: int = 30) -> str:
     """Execute a JXA script via osascript and return stdout.
 
@@ -28,13 +35,16 @@ def _run_jxa(script: str, timeout: int = 30) -> str:
     Raises:
         RuntimeError on timeout or execution error.
     """
-    result = subprocess.run(
-        ["/usr/bin/osascript", "-l", "JavaScript"],
-        input=script,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        result = subprocess.run(
+            ["/usr/bin/osascript", "-l", "JavaScript"],
+            input=script,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(_TIMEOUT_MSG.format(timeout=timeout)) from None
     if result.returncode != 0:
         stderr = result.stderr.strip()
         # Provide cleaner error messages
@@ -50,13 +60,16 @@ def _run_applescript(script: str, timeout: int = 30) -> str:
     Some Word for Mac features (e.g., make new Word comment) only work
     via AppleScript, not JXA. This is the fallback for those cases.
     """
-    result = subprocess.run(
-        ["/usr/bin/osascript"],
-        input=script,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        result = subprocess.run(
+            ["/usr/bin/osascript"],
+            input=script,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(_TIMEOUT_MSG.format(timeout=timeout)) from None
     if result.returncode != 0:
         stderr = result.stderr.strip()
         raise RuntimeError(f"AppleScript error: {stderr}")
