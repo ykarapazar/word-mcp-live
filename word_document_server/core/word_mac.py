@@ -448,15 +448,17 @@ def mac_get_paragraph_format(
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var paras = d.paragraphs();
+// d.paragraphs() resolves every paragraph (tens of seconds on long documents);
+// address only the requested ones by index instead.
+var paraCount = d.paragraphs.length;
 var startP = {start_paragraph};
 var endP = {ep} !== null ? {ep} : startP;
-endP = Math.min(endP, paras.length - 1);
+endP = Math.min(endP, paraCount - 1);
 var results = [];
 for (var i = startP; i <= endP; i++) {{
-    var p = paras[i];
+    var p = d.paragraphs[i];
     var pf = p.paragraphFormat;
-    var fo = p.textObject.fontObject;
+    var fo = p.textObject.fontObject.properties();  // one Apple Event instead of four
     var info = {{
         index: i,
         text: p.textObject.content(),
@@ -468,10 +470,10 @@ for (var i = startP; i <= endP; i++) {{
         keepWithNext: pf.keepWithNext(),
         keepTogether: pf.keepTogether(),
         pageBreakBefore: pf.pageBreakBefore(),
-        fontName: fo.name(),
-        fontSize: fo.fontSize(),
-        bold: fo.bold(),
-        italic: fo.italic()
+        fontName: fo.name,
+        fontSize: fo.fontSize,
+        bold: fo.bold,
+        italic: fo.italic
     }};
     try {{ info.style = p.style(); }} catch(e) {{}}
     results.push(info);
@@ -486,29 +488,35 @@ def mac_diagnose_layout(filename: str = None) -> str:
     return _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
-var paras = d.paragraphs();
+// d.paragraphs() resolves every paragraph (tens of seconds on long documents);
+// address them by index and read text only for paragraphs that are reported.
+var paraCount = d.paragraphs.length;
 var issues = [];
 var kwnChain = [];
-for (var i = 0; i < paras.length; i++) {{
-    var pf = paras[i].paragraphFormat;
+for (var i = 0; i < paraCount; i++) {{
+    var p = d.paragraphs[i];
+    var pf = p.paragraphFormat;
     var kwn = pf.keepWithNext();
-    var kt = pf.keepTogether();
     var pbb = pf.pageBreakBefore();
-    var text = paras[i].textObject.content().substring(0, 60);
+    var text = null;
     if (kwn) {{
         kwnChain.push(i);
     }} else if (kwnChain.length > 2) {{
+        text = p.textObject.content().substring(0, 60);
         issues.push({{type: "keep_with_next_chain", paragraphs: kwnChain.slice(), length: kwnChain.length, firstText: text}});
         kwnChain = [];
     }} else {{
         kwnChain = [];
     }}
-    if (pbb) issues.push({{type: "page_break_before", paragraph: i, text: text}});
+    if (pbb) {{
+        if (text === null) text = p.textObject.content().substring(0, 60);
+        issues.push({{type: "page_break_before", paragraph: i, text: text}});
+    }}
 }}
 if (kwnChain.length > 2) {{
     issues.push({{type: "keep_with_next_chain", paragraphs: kwnChain, length: kwnChain.length}});
 }}
-JSON.stringify({{issues: issues, totalParagraphs: paras.length}});
+JSON.stringify({{issues: issues, totalParagraphs: paraCount}});
 """)
 
 
