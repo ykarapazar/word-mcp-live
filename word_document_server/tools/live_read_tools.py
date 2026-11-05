@@ -51,6 +51,21 @@ def _bulk_paragraph_texts(doc):
     return texts if len(texts) == doc.Paragraphs.Count else None
 
 
+
+def _page_count(doc) -> int:
+    """Page count after forcing layout.
+
+    Word lays pages out in the background (hidden Word especially), and
+    ComputeStatistics(wdStatisticPages) returns only the pages laid out so
+    far: one 290-page test document reported 6, 178 or 290 pages. Repaginate()
+    finishes the layout first; it is near-free once the layout is current.
+    """
+    try:
+        doc.Repaginate()
+    except Exception:
+        pass
+    return doc.ComputeStatistics(2)  # wdStatisticPages
+
 def _read_paragraphs(doc) -> list[dict]:
     """Read all paragraphs from *doc* and return as a list of dicts."""
     texts = _bulk_paragraph_texts(doc)
@@ -309,7 +324,7 @@ async def word_live_get_text(filename: str = None) -> str:
 
         # Large document safety cap: return first 3 pages instead of all
         if total_paras > 200:
-            total_pages = doc.ComputeStatistics(2)  # wdStatisticPages
+            total_pages = _page_count(doc)
             result = json.loads(await word_live_get_page_text(filename, 1, 3))
             result["truncated"] = True
             result["total_paragraphs"] = total_paras
@@ -510,7 +525,6 @@ async def word_live_get_info(filename: str = None) -> str:
         doc = find_document(app, filename)
 
         # wdStatistic constants
-        WD_STAT_PAGES = 2
         WD_STAT_WORDS = 0
         WD_STAT_CHARACTERS = 3
         WD_STAT_LINES = 1
@@ -518,7 +532,7 @@ async def word_live_get_info(filename: str = None) -> str:
         info = {
             "name": doc.Name,
             "full_path": doc.FullName,
-            "pages": doc.ComputeStatistics(WD_STAT_PAGES),
+            "pages": _page_count(doc),
             "words": doc.ComputeStatistics(WD_STAT_WORDS),
             "characters": doc.ComputeStatistics(WD_STAT_CHARACTERS),
             "lines": doc.ComputeStatistics(WD_STAT_LINES),
@@ -1266,8 +1280,7 @@ async def word_live_get_page_text(
         app = get_word_app()
         doc = find_document(app, filename)
 
-        # wdStatisticPages = 2
-        total_pages = doc.ComputeStatistics(2)
+        total_pages = _page_count(doc)
 
         if page > total_pages:
             return json.dumps({
@@ -1703,7 +1716,7 @@ async def word_live_list_open() -> str:
             entry["track_revisions"] = _get("TrackRevisions", bool)
 
             try:
-                entry["pages"] = doc.ComputeStatistics(2)  # wdStatisticPages
+                entry["pages"] = _page_count(doc)
             except Exception:
                 entry["pages"] = None
 
