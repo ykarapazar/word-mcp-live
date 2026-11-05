@@ -247,3 +247,41 @@ def restore_author(app, state) -> None:
             app.Options.UseLocalUserInfo = False
         except Exception:
             pass
+
+
+# HRESULTs for "Word cannot take an automation call right now" (a dialog box
+# or another modal state is open) and "the Word process went away".
+_BUSY_HRESULTS = {-2147418111, -2147417846}  # RPC_E_CALL_REJECTED, RPC_E_SERVERCALL_RETRYLATER
+_GONE_HRESULTS = {-2147023174, -2147417848, -2147023170}  # RPC_S_SERVER_UNAVAILABLE, RPC_E_DISCONNECTED, RPC_S_CALL_FAILED
+_LOCKED_SCODE = -2146823683  # "...not available because the document is locked for editing"
+_BUSY_MSG = ("Word is not accepting commands right now, usually because a dialog box "
+             "is open in Word. Close the dialog in Word and try again.")
+
+
+def describe_error(e: Exception) -> str:
+    """Turn a COM / pywin32 exception into a message a user can act on.
+
+    Falls back to str(e) for anything not recognised.
+    """
+    raw = str(e)
+    if isinstance(e, AttributeError) and raw.startswith("<unknown>."):
+        # pywin32 raises this when Word refuses the member lookup; the HRESULT
+        # is discarded, but in practice it means Word is in a modal state.
+        return f"{_BUSY_MSG} (Word did not answer: {raw})"
+    args = getattr(e, "args", ())
+    if type(e).__name__ != "com_error" or not args:
+        return raw
+    hr = args[0]
+    excepinfo = args[2] if len(args) > 2 and isinstance(args[2], tuple) else None
+    scode = excepinfo[5] if excepinfo and len(excepinfo) > 5 else None
+    desc = (excepinfo[2] or "").strip() if excepinfo and len(excepinfo) > 2 else ""
+    if hr in _BUSY_HRESULTS or scode in _BUSY_HRESULTS:
+        return _BUSY_MSG
+    if hr in _GONE_HRESULTS or scode in _GONE_HRESULTS:
+        return "Word closed or restarted during the call. Open the document in Word and try again."
+    if scode == _LOCKED_SCODE or "locked for editing" in desc:
+        return ("The document is protected (Restrict Editing) and Word refused this change. "
+                f"Unprotect it in Word first. Word said: {desc}")
+    if desc:
+        return f"Word error: {desc}"
+    return raw

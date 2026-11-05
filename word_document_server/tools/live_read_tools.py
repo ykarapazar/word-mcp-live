@@ -12,7 +12,7 @@ import time
 from difflib import SequenceMatcher
 
 from word_document_server.defaults import DEFAULT_AUTHOR, DEFAULT_INITIALS
-from word_document_server.core.word_com import set_author, restore_author
+from word_document_server.core.word_com import describe_error, set_author, restore_author
 # macOS JXA dispatch
 _MAC_AVAILABLE = __import__('sys').platform == 'darwin'
 
@@ -120,7 +120,7 @@ async def word_live_take_snapshot(filename: str = None) -> str:
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_get_diff(filename: str = None) -> str:
@@ -221,7 +221,7 @@ async def word_live_get_diff(filename: str = None) -> str:
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_snapshot_status(filename: str = None) -> str:
@@ -259,7 +259,7 @@ async def word_live_snapshot_status(filename: str = None) -> str:
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +331,7 @@ async def word_live_get_text(filename: str = None) -> str:
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_get_paragraph_format(
@@ -484,7 +484,7 @@ async def word_live_get_paragraph_format(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_get_info(filename: str = None) -> str:
@@ -542,7 +542,7 @@ async def word_live_get_info(filename: str = None) -> str:
         return json.dumps({"success": True, **info}, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_find_text(
@@ -666,7 +666,7 @@ async def word_live_find_text(
         return json.dumps(result, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_get_comments(filename: str = None) -> str:
@@ -734,7 +734,7 @@ async def word_live_get_comments(filename: str = None) -> str:
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_add_comment(
@@ -809,7 +809,7 @@ async def word_live_add_comment(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_reply_to_comment(
@@ -877,7 +877,7 @@ async def word_live_reply_to_comment(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_resolve_comment(
@@ -945,7 +945,7 @@ async def word_live_resolve_comment(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_delete_comment(
@@ -997,7 +997,7 @@ async def word_live_delete_comment(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_list_revisions(filename: str = None) -> str:
@@ -1066,7 +1066,7 @@ async def word_live_list_revisions(filename: str = None) -> str:
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_accept_revisions(
@@ -1138,7 +1138,7 @@ async def word_live_accept_revisions(
             })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_reject_revisions(
@@ -1207,7 +1207,7 @@ async def word_live_reject_revisions(
             })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_get_page_text(
@@ -1319,7 +1319,7 @@ async def word_live_get_page_text(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_get_undo_history(
@@ -1376,7 +1376,7 @@ async def word_live_get_undo_history(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_diagnose_layout(
@@ -1526,7 +1526,7 @@ async def word_live_diagnose_layout(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 _CORE_PROP_MAP = {
@@ -1620,7 +1620,7 @@ async def word_live_set_core_properties(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_list_open() -> str:
@@ -1706,4 +1706,4 @@ async def word_live_list_open() -> str:
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})

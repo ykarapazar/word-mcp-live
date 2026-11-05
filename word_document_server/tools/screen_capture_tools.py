@@ -4,6 +4,8 @@ import json
 import os
 import sys
 
+from word_document_server.core.word_com import describe_error
+
 _MAC_AVAILABLE = sys.platform == 'darwin'
 
 
@@ -123,4 +125,4 @@ async def word_screen_capture(filename: str = None, output_path: str = None) -> 
         )
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})

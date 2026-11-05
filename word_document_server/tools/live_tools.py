@@ -10,7 +10,7 @@ import re
 import sys
 
 from word_document_server.defaults import DEFAULT_AUTHOR
-from word_document_server.core.word_com import set_author, restore_author
+from word_document_server.core.word_com import describe_error, set_author, restore_author
 # macOS JXA dispatch
 _MAC_AVAILABLE = __import__('sys').platform == 'darwin'
 
@@ -131,7 +131,7 @@ async def word_live_insert_text(
         return json.dumps(result)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_format_text(
@@ -327,7 +327,7 @@ async def word_live_format_text(
         )
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_apply_list(
@@ -512,7 +512,7 @@ async def word_live_apply_list(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_setup_heading_numbering(
@@ -911,7 +911,7 @@ async def word_live_setup_heading_numbering(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_replace_text(
@@ -1047,7 +1047,7 @@ async def word_live_replace_text(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_insert_paragraphs(
@@ -1173,7 +1173,7 @@ async def word_live_insert_paragraphs(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_add_table(
@@ -1321,7 +1321,7 @@ async def word_live_add_table(
         )
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_format_table(
@@ -1501,7 +1501,7 @@ async def word_live_format_table(
         )
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_delete_text(
@@ -1579,7 +1579,7 @@ async def word_live_delete_text(
         )
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_modify_table(
@@ -1755,7 +1755,7 @@ async def word_live_modify_table(
         return json.dumps(result, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_undo(
@@ -1801,7 +1801,7 @@ async def word_live_undo(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_save(
@@ -1852,6 +1852,13 @@ async def word_live_save(
                 "format": ext,
             }, ensure_ascii=False)
         else:
+            # Word silently skips Save() on a read-only document (no error,
+            # nothing written), so check first instead of reporting success.
+            if doc.ReadOnly:
+                return json.dumps({
+                    "error": f"'{doc.Name}' is open read-only in Word, so it cannot be saved "
+                             "to its own path. Use save_as with a new path."
+                }, ensure_ascii=False)
             doc.Save()
             return json.dumps({
                 "success": True,
@@ -1860,7 +1867,7 @@ async def word_live_save(
             }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_toggle_track_changes(
@@ -1905,7 +1912,7 @@ async def word_live_toggle_track_changes(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_insert_image(
@@ -2143,7 +2150,7 @@ async def word_live_insert_image(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_insert_cross_reference(
@@ -2260,7 +2267,7 @@ async def word_live_insert_cross_reference(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_list_cross_reference_items(
@@ -2367,7 +2374,7 @@ async def word_live_list_cross_reference_items(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_insert_equation(
@@ -2546,4 +2553,4 @@ async def word_live_insert_equation(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})

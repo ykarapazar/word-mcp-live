@@ -8,6 +8,8 @@ management for files that are open (and locked) in Word.
 import json
 import sys
 
+from word_document_server.core.word_com import describe_error
+
 # macOS JXA dispatch
 _MAC_AVAILABLE = sys.platform == 'darwin'
 
@@ -109,7 +111,7 @@ async def word_live_set_page_layout(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_add_header_footer(
@@ -183,7 +185,7 @@ async def word_live_add_header_footer(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_add_page_numbers(
@@ -282,7 +284,7 @@ async def word_live_add_page_numbers(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_add_section_break(
@@ -338,7 +340,7 @@ async def word_live_add_section_break(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_set_paragraph_spacing(
@@ -442,7 +444,7 @@ async def word_live_set_paragraph_spacing(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_add_bookmark(
@@ -493,7 +495,7 @@ async def word_live_add_bookmark(
         })
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
 
 
 async def word_live_add_watermark(
@@ -580,4 +582,4 @@ async def word_live_add_watermark(
         }, ensure_ascii=False)
 
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": describe_error(e)})
