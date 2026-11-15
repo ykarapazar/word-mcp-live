@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **`track_replace` hung forever (100% CPU) when `new_text` contained `old_text`** (#16): after each replacement it searched the paragraph again from the start, found `old_text` inside the text it had just inserted, and replaced it again. The search now resumes after the inserted text, so every occurrence is still replaced once.
+
 ## [1.6.22] - 2026-11-10
 
 ### Fixed
