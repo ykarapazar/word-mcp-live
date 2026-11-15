@@ -139,13 +139,22 @@ def _paragraph_text(p: etree._Element) -> str:
     return "".join(texts)
 
 
-def _find_text_in_paragraph(p: etree._Element, search_text: str) -> Optional[list[tuple]]:
+def _find_text_in_paragraph(
+    p: etree._Element,
+    search_text: str,
+    after: Optional[etree._Element] = None,
+) -> Optional[list[tuple]]:
     """Find where search_text appears across runs in a paragraph.
+
+    If ``after`` is a run of the paragraph, only the runs that follow it
+    are searched.
 
     Returns list of (run_element, start_offset, end_offset) tuples
     that together contain the search_text, or None if not found.
     """
     runs = [r for r in p.findall(f".//{W('r')}") if r.find(W("t")) is not None]
+    if after is not None and after in runs:
+        runs = runs[runs.index(after) + 1:]
     if not runs:
         return None
 
@@ -198,9 +207,12 @@ def track_replace_in_doc(
     replacements = 0
 
     for p in _get_paragraphs(root):
-        # Keep searching in the same paragraph until no more matches
+        # Keep searching in the same paragraph until no more matches,
+        # resuming after the text just inserted: when new_text contains
+        # old_text, searching it again would never end.
+        last_ins_run = None
         while True:
-            match = _find_text_in_paragraph(p, old_text)
+            match = _find_text_in_paragraph(p, old_text, after=last_ins_run)
             if match is None:
                 break
 
@@ -268,6 +280,7 @@ def track_replace_in_doc(
                 after_run = _make_run(after_text, after_rpr or rpr)
                 parent.insert(insert_idx + offset, after_run)
 
+            last_ins_run = ins_run
             replacements += 1
 
     if replacements == 0:
