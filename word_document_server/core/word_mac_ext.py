@@ -583,6 +583,27 @@ _AS_WRAP_MAP = {
 }
 
 
+_OFFICE_GROUP_CONTAINER = os.path.expanduser(
+    "~/Library/Group Containers/UBF8T346G9.Office/User Content.localized"
+)
+
+
+def _stage_image_for_word_sandbox(abs_path: str) -> tuple[str, bool]:
+    """Copy an image into Word's sandbox-accessible Group Container to avoid macOS Grant Access dialogs.
+
+    Returns (path_for_word, should_cleanup).
+    """
+    if not os.path.isdir(_OFFICE_GROUP_CONTAINER):
+        return abs_path, False
+    staging_dir = os.path.join(_OFFICE_GROUP_CONTAINER, "MCPStaging")
+    os.makedirs(staging_dir, exist_ok=True)
+    ext = os.path.splitext(abs_path)[1] or ".png"
+    fd, staged_path = tempfile.mkstemp(prefix="img_", suffix=ext, dir=staging_dir)
+    os.close(fd)
+    shutil.copy2(abs_path, staged_path)
+    return staged_path, True
+
+
 def mac_insert_image(
     filename: str | None = None,
     image_path: str = "",
@@ -714,22 +735,32 @@ def mac_insert_image(
     link_val = "true" if link_to_file else "false"
     save_val = "false" if link_to_file else "true"
 
-    script = f"""
-    tell application "Microsoft Word"
-        {_as_doc_resolver(filename)}
-        {range_as}
-        make new inline picture at targetRng with properties {{file name: (POSIX file "{_escape_as(abs_path)}" as text), link to file: {link_val}, save with document: {save_val}}}
-        set pic to inline shape (count of inline shapes of targetDoc) of targetDoc
-        {size_as}
-        set finalW to width of pic
-        set finalH to height of pic
-        {border_as}
-        {align_as}
-        {wrap_as}
-        return (name of targetDoc) & "|||" & finalW & "|||" & finalH
-    end tell
-    """
-    raw = _run_applescript(script, timeout=60).strip()
+    word_img_path, cleanup_staged = (
+        (abs_path, False) if link_to_file else _stage_image_for_word_sandbox(abs_path)
+    )
+    try:
+        script = f"""
+        tell application "Microsoft Word"
+            {_as_doc_resolver(filename)}
+            {range_as}
+            make new inline picture at targetRng with properties {{file name: (POSIX file "{_escape_as(word_img_path)}" as text), link to file: {link_val}, save with document: {save_val}}}
+            set pic to inline shape (count of inline shapes of targetDoc) of targetDoc
+            {size_as}
+            set finalW to width of pic
+            set finalH to height of pic
+            {border_as}
+            {align_as}
+            {wrap_as}
+            return (name of targetDoc) & "|||" & finalW & "|||" & finalH
+        end tell
+        """
+        raw = _run_applescript(script, timeout=60).strip()
+    finally:
+        if cleanup_staged and os.path.exists(word_img_path):
+            try:
+                os.unlink(word_img_path)
+            except OSError:
+                pass
     parts = raw.split("|||")
     doc_name = parts[0]
     out_w = round(float(parts[1].replace(",", ".")), 1) if len(parts) > 1 else final_w_pt
@@ -1277,7 +1308,12 @@ def _reopen_in_word(posix_path: str) -> None:
 
 
 def _rewrite_docx_zip(posix_path: str, updates: dict[str, bytes]) -> None:
-    """Atomically rewrite entries inside a .docx zip archive."""
+    """Safely rewrite entries inside a .docx zip archive in-place.
+
+    Writes and verifies a temporary zip first, then overwrites the target file
+    in-place (preserving its inode) so macOS App Sandbox security-scoped
+    bookmarks in Microsoft Word remain valid without re-prompting Grant Access.
+    """
     dir_name = os.path.dirname(posix_path)
     fd, tmp_path = tempfile.mkstemp(prefix=".word_mcp_", suffix=".docx", dir=dir_name)
     os.close(fd)
@@ -1295,11 +1331,17 @@ def _rewrite_docx_zip(posix_path: str, updates: dict[str, bytes]) -> None:
             for fname, payload in updates.items():
                 if fname not in written:
                     zout.writestr(fname, payload)
-        shutil.move(tmp_path, posix_path)
-    except Exception:
+        # Verify archive integrity before touching the original file
+        with zipfile.ZipFile(tmp_path, "r") as zcheck:
+            bad = zcheck.testzip()
+            if bad is not None:
+                raise RuntimeError(f"Corrupt zip entry after OOXML edit: {bad}")
+        # Copy bytes in-place to preserve inode for macOS App Sandbox bookmark
+        with open(tmp_path, "rb") as src, open(posix_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
-        raise
 
 
 def _ensure_comments_extended_wiring(
