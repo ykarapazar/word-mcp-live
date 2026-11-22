@@ -107,12 +107,21 @@ async def word_live_take_snapshot(filename: str = None) -> str:
     """
     if _MAC_AVAILABLE:
         from word_document_server.core.word_mac import mac_get_text
-        import json as _json
-        result = _json.loads(mac_get_text(filename=filename))
-        paras = [{"index": p["index"] + 1, "text": p["text"].rstrip("\r\x07")} for p in result["paragraphs"]]
-        doc_name = (filename or "active").lower()
-        _paragraph_snapshots[doc_name] = {"timestamp": time.time(), "paragraphs": paras}
-        return _json.dumps({"success": True, "document": filename or "active", "paragraph_count": len(paras), "snapshot_timestamp": _paragraph_snapshots[doc_name]["timestamp"], "message": "Snapshot stored. Use word_live_get_diff to see changes."}, ensure_ascii=False)
+        from word_document_server.core.word_mac_ext import _resolve_open_doc_name
+        result = json.loads(mac_get_text(filename=filename))
+        if "error" in result:
+            return json.dumps(result, ensure_ascii=False)
+        paras = [{"index": p["index"] + 1, "text": p["text"].rstrip("\r\x07")} for p in result.get("paragraphs", [])]
+        doc_name = result.get("document") or _resolve_open_doc_name(filename)
+        key = doc_name.lower()
+        _paragraph_snapshots[key] = {"timestamp": time.time(), "paragraphs": paras}
+        return json.dumps({
+            "success": True,
+            "document": doc_name,
+            "paragraph_count": len(paras),
+            "snapshot_timestamp": _paragraph_snapshots[key]["timestamp"],
+            "message": "Snapshot stored. Use word_live_get_diff to see changes.",
+        }, ensure_ascii=False)
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
@@ -154,6 +163,60 @@ async def word_live_get_diff(filename: str = None) -> str:
         JSON with keys: added, modified, deleted, unchanged_count,
         snapshot_age_seconds, and current_paragraph_count.
     """
+    if _MAC_AVAILABLE:
+        try:
+            from word_document_server.core.word_mac import mac_get_text
+            from word_document_server.core.word_mac_ext import _resolve_open_doc_name
+            doc_name = _resolve_open_doc_name(filename)
+            snap = _paragraph_snapshots.get(doc_name.lower())
+            if snap is None:
+                return json.dumps({
+                    "error": "No snapshot exists for this document. Call word_live_take_snapshot first."
+                })
+            result = json.loads(mac_get_text(filename=filename))
+            if "error" in result:
+                return json.dumps(result, ensure_ascii=False)
+            old_paras = snap["paragraphs"]
+            new_paras = [{"index": p["index"] + 1, "text": p["text"].rstrip("\r\x07")} for p in result.get("paragraphs", [])]
+            old_texts = [p["text"] for p in old_paras]
+            new_texts = [p["text"] for p in new_paras]
+            matcher = SequenceMatcher(None, old_texts, new_texts)
+            added, modified, deleted = [], [], []
+            unchanged = 0
+            for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+                if tag == "equal":
+                    unchanged += (j2 - j1)
+                elif tag == "replace":
+                    for k in range(max(i2 - i1, j2 - j1)):
+                        old_idx = i1 + k if (i1 + k) < i2 else None
+                        new_idx = j1 + k if (j1 + k) < j2 else None
+                        if old_idx is not None and new_idx is not None:
+                            modified.append({"paragraph_index": new_idx + 1, "old_text": old_texts[old_idx], "new_text": new_texts[new_idx]})
+                        elif old_idx is not None:
+                            deleted.append({"old_paragraph_index": old_idx + 1, "text": old_texts[old_idx]})
+                        elif new_idx is not None:
+                            added.append({"paragraph_index": new_idx + 1, "text": new_texts[new_idx]})
+                elif tag == "delete":
+                    for idx in range(i1, i2):
+                        deleted.append({"old_paragraph_index": idx + 1, "text": old_texts[idx]})
+                elif tag == "insert":
+                    for idx in range(j1, j2):
+                        added.append({"paragraph_index": idx + 1, "text": new_texts[idx]})
+            return json.dumps({
+                "success": True,
+                "document": doc_name,
+                "has_changes": bool(added or modified or deleted),
+                "added": added,
+                "modified": modified,
+                "deleted": deleted,
+                "unchanged_count": unchanged,
+                "current_paragraph_count": len(new_paras),
+                "snapshot_paragraph_count": len(old_paras),
+                "snapshot_age_seconds": round(time.time() - snap["timestamp"], 1),
+            }, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -248,6 +311,27 @@ async def word_live_snapshot_status(filename: str = None) -> str:
     Returns:
         JSON with has_snapshot, age_seconds, and paragraph_count.
     """
+    if _MAC_AVAILABLE:
+        try:
+            from word_document_server.core.word_mac_ext import _resolve_open_doc_name
+            doc_name = _resolve_open_doc_name(filename)
+            snap = _paragraph_snapshots.get(doc_name.lower())
+            if snap is None:
+                return json.dumps({
+                    "has_snapshot": False,
+                    "document": doc_name,
+                    "message": "No snapshot stored. Call word_live_take_snapshot or word_live_get_text first.",
+                }, ensure_ascii=False)
+            return json.dumps({
+                "has_snapshot": True,
+                "document": doc_name,
+                "snapshot_paragraph_count": len(snap["paragraphs"]),
+                "snapshot_age_seconds": round(time.time() - snap["timestamp"], 1),
+                "snapshot_timestamp": snap["timestamp"],
+            }, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
@@ -863,7 +947,16 @@ async def word_live_reply_to_comment(
         return json.dumps({"error": str(e)})
 
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_reply_to_comment is not available on macOS — the AppleScript dictionary does not expose this feature"})
+        from word_document_server.core.word_mac_ext import mac_reply_to_comment
+        try:
+            return mac_reply_to_comment(
+                filename=filename,
+                comment_index=comment_index,
+                text=text,
+                author=author,
+            )
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
@@ -929,7 +1022,15 @@ async def word_live_resolve_comment(
         JSON with result info.
     """
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_resolve_comment is not available on macOS — the AppleScript dictionary does not expose this feature"})
+        from word_document_server.core.word_mac_ext import mac_resolve_comment
+        try:
+            return mac_resolve_comment(
+                filename=filename,
+                comment_index=comment_index,
+                resolve=resolve,
+            )
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
@@ -1367,7 +1468,11 @@ async def word_live_get_undo_history(
         JSON with undo_entries list (most recent first) and count.
     """
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_get_undo_history is not available on macOS — the AppleScript dictionary does not expose this feature"})
+        from word_document_server.core.word_mac_ext import mac_get_undo_history
+        try:
+            return mac_get_undo_history(filename=filename)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
@@ -1604,6 +1709,24 @@ async def word_live_set_core_properties(
     Returns:
         JSON {ok, document, changed: {field: {old, new}}, errors: {field: msg}}.
     """
+    if _MAC_AVAILABLE:
+        from word_document_server.core.word_mac_ext import mac_set_core_properties
+        try:
+            return mac_set_core_properties(
+                filename=filename,
+                title=title,
+                subject=subject,
+                author=author,
+                keywords=keywords,
+                comments=comments,
+                category=category,
+                manager=manager,
+                company=company,
+                last_author=last_author,
+            )
+        except Exception as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
     if sys.platform != "win32":
         return json.dumps({"error": "Live tools are only available on Windows"})
 
