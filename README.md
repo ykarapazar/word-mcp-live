@@ -249,9 +249,9 @@ In the desktop app: Settings → MCP servers → Add server. On Windows, run Cod
 
 Both modes work together. The AI picks the right one for the task.
 
-### macOS Live Editing (New in v1.5.0)
+### macOS Live Editing
 
-Live tools now work on macOS via JavaScript for Automation (JXA). Same tool names, same parameters — the server detects your platform and uses the right automation backend.
+Live tools work on macOS via JavaScript for Automation (JXA), AppleScript, and an OOXML hybrid helper for Modern Comments. Same tool names, same parameters — the server detects your platform and uses the right automation backend.
 
 | Feature | Windows | macOS |
 |---------|---------|-------|
@@ -261,14 +261,17 @@ Live tools now work on macOS via JavaScript for Automation (JXA). Same tool name
 | Comments (add, delete, list) | COM | JXA |
 | Tables (add, read, modify rows/cells) | COM | JXA |
 | Page layout, headers, bookmarks | COM | JXA |
-| Table formatting (`word_live_format_table`) | COM | Not available |
-| Images, multi-paragraph insert | COM | Not available |
-| Equations, cross-references | COM | Not available |
-| Snapshot diff/status, document properties | COM | Not available |
-| Threaded comment replies | COM | Not available |
-| Comment resolve/unresolve | COM | Not available |
-| Undo history inspection | COM | Not available |
-| Watermarks | COM | Not available |
+| Table formatting (`word_live_format_table`) | COM | AppleScript |
+| Images, multi-paragraph insert | COM | AppleScript / JXA |
+| Equations, cross-references | COM | JXA / AppleScript |
+| Snapshot diff/status, document properties | COM | Python / AppleScript |
+| Threaded comment replies | COM | OOXML hybrid* |
+| Comment resolve/unresolve | COM | OOXML hybrid* |
+| Undo history inspection | COM | MCP-tracked** |
+| Watermarks | COM | AppleScript |
+
+> \* **Threaded comment replies & resolve/unresolve on macOS:** Word for Mac's AppleScript dictionary does not expose `Replies` or `Done` on comments. On macOS, these tools save, briefly close, edit `word/comments.xml` + `word/commentsExtended.xml` in-place (preserving file inode & sandbox permissions), and reopen the local `.docx` automatically.
+> \*\* **Undo history inspection on macOS:** Tracks MCP-initiated edit actions in server memory (synced with `word_live_undo`), as Word for Mac does not expose manual UI undo stack entries via AppleScript/JXA.
 
 ## Configuration
 
@@ -369,7 +372,7 @@ The comment appears in Word's Review panel, anchored to the specified text.
 |----------|-------|
 | Cross-platform (python-docx) | 75 |
 | Windows Live (COM automation) | 45 (44 `word_live_*` + `word_screen_capture`) |
-| macOS Live (JXA automation) | 32 (of the 45 live tools) |
+| macOS Live (JXA / AppleScript / OOXML hybrid) | 45 (full parity with Windows live tools) |
 
 ## Requirements
 

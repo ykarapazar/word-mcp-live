@@ -520,7 +520,15 @@ async def word_live_add_watermark(
         JSON with result info.
     """
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_add_watermark is not yet implemented on macOS"})
+        from word_document_server.core.word_mac_ext import mac_add_watermark
+        return mac_add_watermark(
+            filename=filename,
+            text=text,
+            font_size=font_size,
+            font_color=font_color,
+            rotation=rotation,
+            section_index=section_index,
+        )
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live layout tools are only available on Windows"})

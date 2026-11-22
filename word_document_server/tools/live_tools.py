@@ -1077,7 +1077,16 @@ async def word_live_insert_paragraphs(
         JSON with result info including count of paragraphs inserted.
     """
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_insert_paragraphs is not yet implemented on macOS"})
+        from word_document_server.core.word_mac_ext import mac_insert_paragraphs
+        return mac_insert_paragraphs(
+            filename=filename,
+            paragraphs=paragraphs,
+            target_text=target_text,
+            target_paragraph_index=target_paragraph_index,
+            position=position,
+            style=style,
+            track_changes=track_changes,
+        )
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live editing is only available on Windows"})
@@ -1370,7 +1379,18 @@ async def word_live_format_table(
         JSON with result info.
     """
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_format_table is not yet implemented on macOS"})
+        from word_document_server.core.word_mac_ext import mac_format_table
+        return mac_format_table(
+            filename=filename,
+            table_index=table_index,
+            border_style=border_style,
+            cell_bold=cell_bold,
+            cell_alignment=cell_alignment,
+            column_widths=column_widths,
+            table_alignment=table_alignment,
+            cell_shading=cell_shading,
+            autofit=autofit,
+        )
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live editing is only available on Windows"})
@@ -1967,7 +1987,23 @@ async def word_live_insert_image(
         JSON with image insertion result.
     """
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_insert_image is not yet implemented on macOS"})
+        from word_document_server.core.word_mac_ext import mac_insert_image
+        return mac_insert_image(
+            filename=filename,
+            image_path=image_path,
+            paragraph_index=paragraph_index,
+            position=position,
+            width_inches=width_inches,
+            height_inches=height_inches,
+            width_pt=width_pt,
+            height_pt=height_pt,
+            alignment=alignment,
+            wrapping=wrapping,
+            border_style=border_style,
+            border_width_pt=border_width_pt,
+            border_color=border_color,
+            link_to_file=link_to_file,
+        )
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live editing is only available on Windows"})
@@ -2191,7 +2227,16 @@ async def word_live_insert_cross_reference(
         JSON with cross-reference result.
     """
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_insert_cross_reference is not yet implemented on macOS"})
+        from word_document_server.core.word_mac_ext import mac_insert_cross_reference
+        return mac_insert_cross_reference(
+            filename=filename,
+            ref_type=ref_type,
+            ref_item=ref_item,
+            ref_kind=ref_kind,
+            insert_as_hyperlink=insert_as_hyperlink,
+            paragraph_index=paragraph_index,
+            insert_position=insert_position,
+        )
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live editing is only available on Windows"})
@@ -2297,7 +2342,8 @@ async def word_live_list_cross_reference_items(
         JSON with list of referenceable items and their indices.
     """
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_list_cross_reference_items is not yet implemented on macOS"})
+        from word_document_server.core.word_mac_ext import mac_list_cross_reference_items
+        return mac_list_cross_reference_items(filename=filename, ref_type=ref_type)
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live editing is only available on Windows"})
@@ -2491,7 +2537,15 @@ async def word_live_insert_equation(
         r"\gcd": "gcd", r"\arg": "arg", r"\mod": "mod",
     }
     if _MAC_AVAILABLE:
-        return json.dumps({"error": "word_live_insert_equation is not yet implemented on macOS"})
+        from word_document_server.core.word_mac_ext import mac_insert_equation
+        return mac_insert_equation(
+            filename=filename,
+            equation_text=equation,
+            paragraph_index=paragraph_index,
+            position=position,
+            display_mode=display_mode,
+            symbol_map=UNICODE_MATH,
+        )
 
     if sys.platform != "win32":
         return json.dumps({"error": "Live editing is only available on Windows"})

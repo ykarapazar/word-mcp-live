@@ -312,15 +312,22 @@ JSON.stringify({{saved: true, name: d.name()}});
 def mac_undo(filename: str = None, times: int = 1) -> str:
     """Undo N times."""
     finder = _doc_finder_js(filename)
-    return _run_jxa(f"""
+    out = _run_jxa(f"""
 var app = Application("Microsoft Word");
 {finder}
 var results = [];
 for (var i = 0; i < {times}; i++) {{
     results.push(d.undo());
 }}
-JSON.stringify({{undone: {times}, results: results}});
+JSON.stringify({{undone: {times}, results: results, document: d.name()}});
 """)
+    try:
+        from word_document_server.core.word_mac_ext import pop_mac_undo
+        parsed = json.loads(out)
+        pop_mac_undo(parsed.get("document") or filename, parsed.get("undone", times))
+    except Exception:
+        pass
+    return out
 
 
 # ── Read ─────────────────────────────────────────────────────────────────
