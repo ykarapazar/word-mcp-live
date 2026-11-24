@@ -243,9 +243,117 @@ def find_paragraph_by_text(doc, text, partial_match=False):
     return matching_paragraphs
 
 
+def is_toc_p_element(p_elem) -> bool:
+    """Check if a <w:p> element has a Table of Contents (TOC) style."""
+    pPr = p_elem.find(qn('w:pPr'))
+    if pPr is not None:
+        pStyle = pPr.find(qn('w:pStyle'))
+        if pStyle is not None:
+            val = pStyle.get(qn('w:val')) or pStyle.get('w:val') or ''
+            if val and val.upper().startswith("TOC"):
+                return True
+    return False
+
+
+def _replace_text_in_p_element(p_elem, old_text: str, new_text: str) -> int:
+    """Replace all occurrences of old_text with new_text inside a single <w:p> element.
+    
+    Handles both single-run occurrences and multi-run fragmentation across
+    adjacent <w:r> runs.
+    """
+    if not old_text:
+        return 0
+
+    # Get runs whose closest ancestor paragraph is this p_elem
+    runs = []
+    for r in p_elem.xpath('.//w:r'):
+        ancestors = r.xpath('ancestor::w:p')
+        if ancestors and ancestors[-1] == p_elem:
+            runs.append(r)
+
+    if not runs:
+        return 0
+
+    count = 0
+
+    # Fast-path: Check if old_text is completely contained within single <w:t> elements
+    single_replaced = False
+    for r in runs:
+        for t in r.xpath('.//w:t'):
+            if t.text and old_text in t.text:
+                occ = t.text.count(old_text)
+                t.text = t.text.replace(old_text, new_text)
+                if t.text and (t.text.startswith(' ') or t.text.endswith(' ')):
+                    t.set(qn('xml:space'), 'preserve')
+                count += occ
+                single_replaced = True
+
+    if single_replaced:
+        return count
+
+    # Multi-run match (Run Fragmentation across multiple <w:r> tags)
+    char_map = []
+    for r in runs:
+        for t in r.xpath('.//w:t'):
+            if t.text:
+                for idx_in_t, ch in enumerate(t.text):
+                    char_map.append((t, idx_in_t, ch))
+
+    if not char_map:
+        return 0
+
+    full_text = ''.join(item[2] for item in char_map)
+    if old_text not in full_text:
+        return 0
+
+    matches = []
+    start = 0
+    while True:
+        pos = full_text.find(old_text, start)
+        if pos == -1:
+            break
+        matches.append(pos)
+        start = pos + len(old_text)
+
+    if not matches:
+        return 0
+
+    # Prepare list of characters per t element
+    t_replacements = {}
+    for t, _, _ in char_map:
+        if t not in t_replacements:
+            t_replacements[t] = list(t.text or '')
+
+    for match_start in matches:
+        match_end = match_start + len(old_text)
+        first_t, first_idx, _ = char_map[match_start]
+        t_replacements[first_t][first_idx] = new_text
+
+        for m_idx in range(match_start + 1, match_end):
+            t_elem, c_idx, _ = char_map[m_idx]
+            t_replacements[t_elem][c_idx] = ''
+
+        count += 1
+
+    for t, char_list in t_replacements.items():
+        new_str = ''.join(char_list)
+        t.text = new_str
+        if new_str and (new_str.startswith(' ') or new_str.endswith(' ')):
+            t.set(qn('xml:space'), 'preserve')
+
+    return count
+
+
 def find_and_replace_text(doc, old_text, new_text):
     """
     Find and replace text throughout the document, skipping Table of Contents (TOC) paragraphs.
+    
+    Supports:
+    - Paragraphs in main document body
+    - Paragraphs in table cells
+    - Paragraphs in textboxes and shapes (<w:txbxContent>, DrawingML, VML)
+    - Paragraphs in headers and footers
+    - Text fragmented across multiple <w:r> runs
     
     Args:
         doc: Document object
@@ -255,33 +363,38 @@ def find_and_replace_text(doc, old_text, new_text):
     Returns:
         Number of replacements made
     """
-    count = 0
-    
-    # Search in paragraphs
-    for para in doc.paragraphs:
-        # Skip TOC paragraphs
-        if para.style and para.style.name.startswith("TOC"):
-            continue
-        if old_text in get_effective_text(para):
-            for run in para.runs:
-                if old_text in run.text:
-                    run.text = run.text.replace(old_text, new_text)
-                    count += 1
+    if not old_text:
+        return 0
 
-    # Search in tables
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    # Skip TOC paragraphs in tables
-                    if para.style and para.style.name.startswith("TOC"):
+    count = 0
+    processed_p_elements = set()
+
+    # 1. Search in all body, table, and textbox paragraphs in main document
+    for p_elem in doc._element.xpath('.//w:p'):
+        if p_elem in processed_p_elements:
+            continue
+        processed_p_elements.add(p_elem)
+
+        if is_toc_p_element(p_elem):
+            continue
+
+        count += _replace_text_in_p_element(p_elem, old_text, new_text)
+
+    # 2. Search in headers and footers across all sections
+    for section in doc.sections:
+        for hf_name in ['header', 'footer', 'first_page_header', 'first_page_footer', 'even_page_header', 'even_page_footer']:
+            hf = getattr(section, hf_name, None)
+            if hf is not None and hasattr(hf, '_element') and hf._element is not None:
+                for p_elem in hf._element.xpath('.//w:p'):
+                    if p_elem in processed_p_elements:
                         continue
-                    if old_text in get_effective_text(para):
-                        for run in para.runs:
-                            if old_text in run.text:
-                                run.text = run.text.replace(old_text, new_text)
-                                count += 1
-    
+                    processed_p_elements.add(p_elem)
+
+                    if is_toc_p_element(p_elem):
+                        continue
+
+                    count += _replace_text_in_p_element(p_elem, old_text, new_text)
+
     return count
 
 

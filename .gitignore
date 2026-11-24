@@ -24,3 +24,6 @@ mcp-config.json
 # MCP publisher
 mcp-publisher.exe
 *.mcpb
+
+# Local tooling
+.codegraph/
