@@ -2,6 +2,7 @@
 Document protection functionality for Word Document Server.
 """
 import os
+import sys
 import json
 import hashlib
 import datetime
@@ -79,14 +80,14 @@ def add_protection_info(doc_path: str, protection_type: str, password_hash: str,
                     json.dump(protection_data, f, indent=2)
                     
             except Exception as e:
-                print(f"Encryption error: {str(e)}")
+                print(f"Encryption error: {str(e)}", file=sys.stderr)
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
                 return False
         
         return True
     except Exception as e:
-        print(f"Protection error: {str(e)}")
+        print(f"Protection error: {str(e)}", file=sys.stderr)
         return False
 
 

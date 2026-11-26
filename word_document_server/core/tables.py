@@ -1,6 +1,7 @@
 """
 Table-related operations for Word Document Server.
 """
+import sys
 from docx.oxml.shared import OxmlElement, qn
 from docx.oxml.ns import nsdecls
 from docx.oxml import parse_xml
@@ -193,7 +194,7 @@ def set_cell_shading(cell, fill_color=None, pattern="clear", pattern_color="auto
         return True
         
     except Exception as e:
-        print(f"Error setting cell shading: {e}")
+        print(f"Error setting cell shading: {e}", file=sys.stderr)
         return False
 
 
@@ -216,7 +217,7 @@ def apply_alternating_row_shading(table, color1="FFFFFF", color2="F2F2F2"):
                 set_cell_shading(cell, fill_color=fill_color)
         return True
     except Exception as e:
-        print(f"Error applying alternating row shading: {e}")
+        print(f"Error applying alternating row shading: {e}", file=sys.stderr)
         return False
 
 
@@ -254,7 +255,7 @@ def highlight_header_row(table, header_color="4472C4", text_color="FFFFFF"):
                                 pass  # Skip if color format is invalid
         return True
     except Exception as e:
-        print(f"Error highlighting header row: {e}")
+        print(f"Error highlighting header row: {e}", file=sys.stderr)
         return False
 
 
@@ -280,7 +281,7 @@ def set_cell_shading_by_position(table, row_index, col_index, fill_color, patter
         else:
             return False
     except Exception as e:
-        print(f"Error setting cell shading by position: {e}")
+        print(f"Error setting cell shading by position: {e}", file=sys.stderr)
         return False
 
 
@@ -321,7 +322,7 @@ def merge_cells(table, start_row, start_col, end_row, end_col):
         return True
         
     except Exception as e:
-        print(f"Error merging cells: {e}")
+        print(f"Error merging cells: {e}", file=sys.stderr)
         return False
 
 
@@ -403,7 +404,7 @@ def set_cell_alignment(cell, horizontal="left", vertical="top"):
         return True
         
     except Exception as e:
-        print(f"Error setting cell alignment: {e}")
+        print(f"Error setting cell alignment: {e}", file=sys.stderr)
         return False
 
 
@@ -429,7 +430,7 @@ def set_cell_alignment_by_position(table, row_index, col_index, horizontal="left
         else:
             return False
     except Exception as e:
-        print(f"Error setting cell alignment by position: {e}")
+        print(f"Error setting cell alignment by position: {e}", file=sys.stderr)
         return False
 
 
@@ -451,7 +452,7 @@ def set_table_alignment(table, horizontal="left", vertical="top"):
                 set_cell_alignment(cell, horizontal, vertical)
         return True
     except Exception as e:
-        print(f"Error setting table alignment: {e}")
+        print(f"Error setting table alignment: {e}", file=sys.stderr)
         return False
 
 
@@ -510,7 +511,7 @@ def set_column_width(table, col_index, width, width_type="dxa"):
         return True
         
     except Exception as e:
-        print(f"Error setting column width: {e}")
+        print(f"Error setting column width: {e}", file=sys.stderr)
         return False
 
 
@@ -550,7 +551,7 @@ def set_column_widths(table, widths, width_type="dxa"):
                 return False
         return True
     except Exception as e:
-        print(f"Error setting column widths: {e}")
+        print(f"Error setting column widths: {e}", file=sys.stderr)
         return False
 
 
@@ -607,7 +608,7 @@ def set_table_width(table, width, width_type="dxa"):
         return True
         
     except Exception as e:
-        print(f"Error setting table width: {e}")
+        print(f"Error setting table width: {e}", file=sys.stderr)
         return False
 
 
@@ -649,7 +650,7 @@ def auto_fit_table(table):
         return True
         
     except Exception as e:
-        print(f"Error setting auto-fit table: {e}")
+        print(f"Error setting auto-fit table: {e}", file=sys.stderr)
         return False
 
 
@@ -735,7 +736,7 @@ def format_cell_text(cell, text_content=None, bold=None, italic=None, underline=
         return True
         
     except Exception as e:
-        print(f"Error formatting cell text: {e}")
+        print(f"Error formatting cell text: {e}", file=sys.stderr)
         return False
 
 
@@ -769,7 +770,7 @@ def format_cell_text_by_position(table, row_index, col_index, text_content=None,
         else:
             return False
     except Exception as e:
-        print(f"Error formatting cell text by position: {e}")
+        print(f"Error formatting cell text by position: {e}", file=sys.stderr)
         return False
 
 
@@ -832,7 +833,7 @@ def set_cell_padding(cell, top=None, bottom=None, left=None, right=None, unit="d
         return True
         
     except Exception as e:
-        print(f"Error setting cell padding: {e}")
+        print(f"Error setting cell padding: {e}", file=sys.stderr)
         return False
 
 
@@ -862,5 +863,5 @@ def set_cell_padding_by_position(table, row_index, col_index, top=None, bottom=N
         else:
             return False
     except Exception as e:
-        print(f"Error setting cell padding by position: {e}")
+        print(f"Error setting cell padding by position: {e}", file=sys.stderr)
         return False
