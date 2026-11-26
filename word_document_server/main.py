@@ -47,6 +47,7 @@ from word_document_server.tools.content_tools import replace_block_between_manua
 # ---------------------------------------------------------------------------
 import asyncio
 import functools
+import inspect
 import json as _json
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -97,8 +98,18 @@ def _offload(fn):
 for _mod in (live_tools, live_read_tools, live_layout_tools, screen_capture_tools):
     for _name in dir(_mod):
         _obj = getattr(_mod, _name)
-        if _name.startswith("word_") and asyncio.iscoroutinefunction(_obj):
+        if _name.startswith("word_") and inspect.iscoroutinefunction(_obj):
             setattr(_mod, _name, _offload(_obj))
+
+
+def _should_register_live_tools() -> bool:
+    """Return whether Word live-editing tools should be registered for this session."""
+    mode = os.environ.get("MCP_ENABLE_LIVE_TOOLS", "true").strip().lower()
+    if mode in ("0", "false", "no", "off"):
+        return False
+    if mode == "auto":
+        return sys.platform in ("win32", "darwin")
+    return True
 
 def get_transport_config():
     """
@@ -961,6 +972,13 @@ def register_tools():
         Optionally filter by author or specific change IDs."""
         return tracked_changes_tools.reject_tracked_changes(filename, author, change_ids)
 
+    if _should_register_live_tools():
+        _register_live_tools()
+    _register_layout_and_extra_tools()
+
+
+def _register_live_tools():
+    """Register live Word COM/JXA editing tools."""
     # --- Live editing tools (Windows or macOS, requires Word running) ---
 
     @mcp.tool(
@@ -1061,7 +1079,7 @@ def register_tools():
     )
     def word_live_insert_paragraphs(
         filename: str = None,
-        paragraphs: list = None,
+        paragraphs: list[str] = None,
         target_text: str = None,
         target_paragraph_index: int = None,
         position: str = "after",
@@ -1084,7 +1102,7 @@ def register_tools():
         rows: int = 2,
         cols: int = 2,
         position: str = "end",
-        data: list = None,
+        data: list[list[str]] = None,
         style: str = "Table Grid",
         autofit: str = "window",
         track_changes: bool = False,
@@ -1110,7 +1128,7 @@ def register_tools():
         border_style: str = None,
         cell_bold: list = None,
         cell_alignment: list = None,
-        column_widths: list = None,
+        column_widths: list[float] = None,
         table_alignment: str = None,
         cell_shading: list = None,
         autofit: str = None,
@@ -1186,10 +1204,10 @@ def register_tools():
         level: int = 0,
         remove: bool = False,
         continue_previous: bool = False,
-        number_format: dict = None,
-        number_style: dict = None,
-        start_at: dict = None,
-        level_map: dict = None,
+        number_format: dict[str, str] = None,
+        number_style: dict[str, str] = None,
+        start_at: dict[str, int] = None,
+        level_map: dict[str, int] = None,
         track_changes: bool = False,
         font_color: str = None,
         outline_numbered: bool = True,
@@ -1210,9 +1228,9 @@ def register_tools():
     )
     def word_live_setup_heading_numbering(
         filename: str = None,
-        h1_paragraphs: list = None,
-        h2_paragraphs: list = None,
-        heading_map: dict = None,
+        h1_paragraphs: list[int] = None,
+        h2_paragraphs: list[int] = None,
+        heading_map: dict[str, int] = None,
         strip_manual_numbers: bool = True,
         h1_number_format: str = None,
         h2_number_format: str = None,
@@ -1822,6 +1840,8 @@ def register_tools():
             filename, text, font_size, font_color, rotation, section_index,
         )
 
+def _register_layout_and_extra_tools():
+    """Register cross-platform layout, TOC, merge, and protection tools."""
     # --- Layout, header/footer, spacing, bookmark, watermark tools ---
 
     @mcp.tool(
@@ -2061,12 +2081,10 @@ def run_server():
         print("\nShutting down server...", file=sys.stderr)
     except Exception as e:
         print(f"Error starting server: {e}", file=sys.stderr)
-        if config['debug']:
+        if config.get('debug'):
             import traceback
-            traceback.print_exc()
+            traceback.print_exc(file=sys.stderr)
         sys.exit(1)
-    
-    return mcp
 
 
 def main():
